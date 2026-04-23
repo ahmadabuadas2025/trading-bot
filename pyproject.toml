@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solana-mem-bot"
+version = "0.1.0"
+description = "Personal automated Solana meme-coin trading bot."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "SolanaMemBot" }]
+dependencies = [
+    "aiohttp>=3.9",
+    "aiosqlite>=0.20",
+    "loguru>=0.7",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "PyYAML>=6.0",
+    "streamlit>=1.36",
+    "pandas>=2.2",
+    "plotly>=5.22",
+    "tenacity>=8.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.setuptools]
+packages = ["core", "clients", "services", "utils"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
