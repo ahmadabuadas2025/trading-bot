@@ -1,0 +1,11 @@
+# SolanaMemBot runtime dependencies
+aiohttp>=3.9
+aiosqlite>=0.20
+loguru>=0.7
+pydantic>=2.7
+python-dotenv>=1.0
+PyYAML>=6.0
+streamlit>=1.36
+pandas>=2.2
+plotly>=5.22
+tenacity>=8.3
