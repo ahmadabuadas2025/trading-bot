@@ -67,6 +67,9 @@ safety:
   restricted_age_seconds: 300
   honeypot_check_enabled: true
 
+solana:
+  rpc_url: "https://api.mainnet-beta.solana.com"
+
 dashboard:
   refresh_interval_seconds: 5
 

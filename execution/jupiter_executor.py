@@ -148,7 +148,8 @@ class JupiterExecutor:
                 from solana.rpc.async_api import AsyncClient  # type: ignore[import-untyped]
                 from solders.transaction import VersionedTransaction  # type: ignore[import-untyped]
 
-                rpc = AsyncClient("https://api.mainnet-beta.solana.com")
+                rpc_url = self._config.solana.rpc_url if hasattr(self._config, 'solana') else "https://api.mainnet-beta.solana.com"
+                rpc = AsyncClient(rpc_url)
                 tx_bytes = base64.b64decode(swap_tx)
                 tx = VersionedTransaction.from_bytes(tx_bytes)
 
