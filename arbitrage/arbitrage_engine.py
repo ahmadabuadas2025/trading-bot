@@ -150,7 +150,7 @@ class ArbitrageEngine:
 
         try:
             if not self._portfolio.allocate("arbitrage", capital_usd):
-                self._active_trades -= 1
+                await self._risk.record_trade_result("arbitrage", 0.0)
                 return
 
             record = await self._executor.execute_swap(
