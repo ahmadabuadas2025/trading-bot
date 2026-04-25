@@ -177,9 +177,11 @@ class JupiterExecutor:
                 log.info("[LIVE] Swap executed: tx={}", tx_sig[:16] if tx_sig else "unknown")
                 return record
             finally:
-                if rpc:
-                    await rpc.close()
-                await client.close()
+                try:
+                    if rpc:
+                        await rpc.close()
+                finally:
+                    await client.close()
 
         except ImportError:
             log.error("solders/solana-py not available for live trading")
