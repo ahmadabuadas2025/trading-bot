@@ -1,1 +1,1 @@
-"""Core infrastructure: db, config, http, scoring, safety, LLM."""
+"""Core infrastructure modules for SolanaJupiterBot."""
