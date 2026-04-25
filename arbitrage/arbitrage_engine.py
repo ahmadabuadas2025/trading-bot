@@ -24,6 +24,12 @@ JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
 RAY_MINT = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
 WIF_MINT = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
 
+# Decimal places for known input tokens (used to convert USD → smallest unit)
+_TOKEN_DECIMALS: dict[str, int] = {
+    SOL_MINT: 9,
+    USDC_MINT: 6,
+}
+
 DEFAULT_PAIRS: list[tuple[str, str]] = [
     (SOL_MINT, USDC_MINT),
     (SOL_MINT, BONK_MINT),
@@ -112,7 +118,8 @@ class ArbitrageEngine:
         for input_mint, output_mint in self._pairs:
             balance = self._portfolio.get_balance()
             max_capital = balance * self._config.max_capital_pct
-            amount = int(max_capital * 1e9)
+            decimals = _TOKEN_DECIMALS.get(input_mint, 9)
+            amount = int(max_capital * (10**decimals))
 
             opportunity = await self._scanner.find_arbitrage_opportunity(
                 input_mint=input_mint,
