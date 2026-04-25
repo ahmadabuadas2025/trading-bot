@@ -1,126 +1,179 @@
-"""Config loader for SolanaMemBot.
+"""Configuration manager for SolanaJupiterBot.
 
-Loads :file:`config.yaml` for all non-secret parameters and the
-process environment / ``.env`` file for secrets. Provides strongly
-typed accessors so services do not read raw dicts.
+Loads settings from config.yaml and .env, with CLI override support.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class Secrets:
-    """Container for environment-provided secrets.
+class AppConfig(BaseModel):
+    """Top-level application settings."""
 
-    Attributes:
-        wallet_private_key: Base58 Solana private key (live mode only).
-        openrouter_api_key: OpenRouter API key for LLM calls.
-        lunarcrush_api_key: Optional LunarCrush free-tier key.
-        helius_api_key: Optional Helius RPC/websocket key.
-        birdeye_api_key: Optional Birdeye API key.
-        solana_rpc_url: Explicit RPC override, else derived.
-    """
-
-    wallet_private_key: str | None = None
-    openrouter_api_key: str | None = None
-    lunarcrush_api_key: str | None = None
-    helius_api_key: str | None = None
-    birdeye_api_key: str | None = None
-    solana_rpc_url: str | None = None
+    name: str = "SolanaJupiterBot"
+    timezone: str = "UTC"
+    log_level: str = "INFO"
+    db_path: str = "data/bot.db"
+    log_path: str = "logs/bot.log"
+    mode: str = "paper"
 
 
-@dataclass
-class AppConfig:
-    """Top-level configuration object.
+class RiskConfig(BaseModel):
+    """Risk management parameters."""
 
-    Attributes:
-        raw: The full parsed YAML tree, for features that want to
-            consume deeply nested sections verbatim.
-        secrets: Resolved secrets from the environment.
-        mode: The effective trading mode (``paper`` or ``live``).
-        root: Absolute path to the project root.
-    """
-
-    raw: dict[str, Any]
-    secrets: Secrets
-    mode: str
-    root: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent)
-
-    def section(self, name: str) -> dict[str, Any]:
-        """Return a top-level config section or an empty dict.
-
-        Args:
-            name: Section key in ``config.yaml``.
-
-        Returns:
-            The section dict, or an empty dict if absent.
-        """
-        value = self.raw.get(name, {})
-        if not isinstance(value, dict):
-            raise TypeError(f"Config section {name!r} is not a mapping")
-        return value
-
-    def bucket(self, bucket_name: str) -> dict[str, Any]:
-        """Return the config block for a specific bucket.
-
-        Args:
-            bucket_name: One of ``HOT_TRADER``, ``COPY_TRADER``,
-                ``GEM_HUNTER`` or ``NEW_LISTING``.
-
-        Returns:
-            The bucket configuration mapping.
-        """
-        buckets = self.section("buckets")
-        if bucket_name not in buckets:
-            raise KeyError(f"Unknown bucket {bucket_name!r}")
-        return buckets[bucket_name]
+    max_risk_per_trade_pct: float = 0.02
+    max_daily_drawdown_pct: float = 0.05
+    max_open_trades_per_strategy: int = 3
+    auto_shutdown_on_breach: bool = True
 
 
-class ConfigLoader:
-    """Load ``config.yaml`` and ``.env`` into an :class:`AppConfig`."""
+class PaperTradingConfig(BaseModel):
+    """Paper trading parameters."""
 
-    def __init__(self, config_path: Path | str = "config.yaml") -> None:
-        """Create a loader.
+    starting_balance_usd: float = 1000.0
+    fallback_sol_usd: float = 150.0
 
-        Args:
-            config_path: Path to the YAML configuration file.
-        """
+
+class JupiterConfig(BaseModel):
+    """Jupiter DEX API configuration."""
+
+    base_url: str = "https://quote-api.jup.ag/v6"
+    price_api_url: str = "https://price.jup.ag/v6"
+    default_slippage_bps: int = 100
+    max_slippage_bps: int = 150
+    request_timeout_seconds: int = 15
+    max_retries: int = 3
+
+
+class CopyTradingConfig(BaseModel):
+    """Copy trading strategy configuration."""
+
+    enabled: bool = True
+    min_liquidity_usd: float = 50000
+    max_market_cap_usd: float = 50000000
+    min_wallet_win_rate: float = 0.55
+    position_size_pct_of_signal: float = 0.15
+    stop_loss_pct: float = -0.12
+    take_profit_pct: float = 0.35
+    tracked_wallets: list[str] = Field(default_factory=list)
+
+
+class HotTradingConfig(BaseModel):
+    """Hot trading / momentum strategy configuration."""
+
+    enabled: bool = True
+    volume_spike_multiplier: float = 3.0
+    volume_spike_window_seconds: int = 300
+    take_profit_pct: float = 0.02
+    stop_loss_pct: float = -0.0075
+    max_hold_seconds: int = 120
+
+
+class GemDetectorConfig(BaseModel):
+    """Hidden gem detector strategy configuration."""
+
+    enabled: bool = True
+    min_liquidity_usd: float = 30000
+    min_holders: int = 100
+    allocation_pct: float = 0.02
+    take_profit_multiplier: float = 3.0
+    stop_loss_pct: float = -0.30
+
+
+class ArbitrageConfig(BaseModel):
+    """Arbitrage engine configuration."""
+
+    enabled: bool = True
+    min_profit_threshold_pct: float = 0.003
+    max_capital_pct: float = 0.07
+    max_concurrent_trades: int = 2
+    max_consecutive_failures: int = 5
+    scan_interval_seconds: int = 2
+
+
+class SafetyConfig(BaseModel):
+    """Safety and anti-rug configuration."""
+
+    max_risk_score: int = 50
+    reject_mint_authority: bool = True
+    reject_freeze_authority: bool = True
+    max_top_holder_pct: float = 0.25
+    min_token_age_seconds: int = 30
+    restricted_age_seconds: int = 300
+    honeypot_check_enabled: bool = True
+
+
+class DashboardConfig(BaseModel):
+    """Dashboard configuration."""
+
+    refresh_interval_seconds: int = 5
+
+
+class HttpConfig(BaseModel):
+    """HTTP client configuration."""
+
+    max_retries: int = 3
+    backoff_base_seconds: float = 1.0
+    default_timeout_seconds: float = 20
+
+
+class BotConfig(BaseModel):
+    """Root configuration model aggregating all sections."""
+
+    app: AppConfig = Field(default_factory=AppConfig)
+    risk: RiskConfig = Field(default_factory=RiskConfig)
+    paper_trading: PaperTradingConfig = Field(default_factory=PaperTradingConfig)
+    jupiter: JupiterConfig = Field(default_factory=JupiterConfig)
+    copy_trading: CopyTradingConfig = Field(default_factory=CopyTradingConfig)
+    hot_trading: HotTradingConfig = Field(default_factory=HotTradingConfig)
+    gem_detector: GemDetectorConfig = Field(default_factory=GemDetectorConfig)
+    arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
+    safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
+    http: HttpConfig = Field(default_factory=HttpConfig)
+
+
+class ConfigManager:
+    """Loads and manages bot configuration from YAML and environment."""
+
+    def __init__(self, config_path: str = "config.yaml", mode: str | None = None) -> None:
         self._config_path = Path(config_path)
+        self._mode_override = mode
+        self._raw: dict[str, Any] = {}
+        self.config = BotConfig()
 
-    def load(self, mode_override: str | None = None) -> AppConfig:
-        """Parse YAML and environment and return an :class:`AppConfig`.
+    def load(self) -> BotConfig:
+        """Load configuration from YAML file and .env, then validate."""
+        load_dotenv()
 
-        Args:
-            mode_override: Optional ``paper``/``live`` override from the
-                CLI; takes precedence over ``mode.default`` in YAML.
+        if self._config_path.exists():
+            with open(self._config_path) as f:
+                self._raw = yaml.safe_load(f) or {}
 
-        Returns:
-            A fully populated :class:`AppConfig`.
-        """
-        load_dotenv(override=False)
-        with self._config_path.open("r", encoding="utf-8") as handle:
-            raw = yaml.safe_load(handle) or {}
-        if not isinstance(raw, dict):
-            raise TypeError("config.yaml must be a mapping at the top level")
+        self.config = BotConfig(**self._raw)
 
-        mode = mode_override or raw.get("mode", {}).get("default", "paper")
-        if mode not in {"paper", "live"}:
-            raise ValueError(f"Invalid mode {mode!r}; expected 'paper' or 'live'")
+        if self._mode_override:
+            self.config.app.mode = self._mode_override
 
-        secrets = Secrets(
-            wallet_private_key=os.getenv("WALLET_PRIVATE_KEY") or None,
-            openrouter_api_key=os.getenv("OPENROUTER_API_KEY") or None,
-            lunarcrush_api_key=os.getenv("LUNARCRUSH_API_KEY") or None,
-            helius_api_key=os.getenv("HELIUS_API_KEY") or None,
-            birdeye_api_key=os.getenv("BIRDEYE_API_KEY") or None,
-            solana_rpc_url=os.getenv("SOLANA_RPC_URL") or None,
-        )
-        return AppConfig(raw=raw, secrets=secrets, mode=mode)
+        return self.config
+
+    def get_secret(self, key: str, default: str = "") -> str:
+        """Retrieve a secret from environment variables."""
+        return os.getenv(key, default)
+
+    @property
+    def is_paper_mode(self) -> bool:
+        """Check if running in paper trading mode."""
+        return self.config.app.mode == "paper"
+
+    @property
+    def is_live_mode(self) -> bool:
+        """Check if running in live trading mode."""
+        return self.config.app.mode == "live"
