@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import signal
 import sys
 
 from arbitrage.arbitrage_engine import ArbitrageEngine
 from arbitrage.mev_protection import MEVProtection
 from arbitrage.route_scanner import RouteScanner
-from core.config import ConfigManager
+from core.config import BotConfig, ConfigManager
 from core.database import Database
 from core.logger import LoggerFactory
 from core.portfolio_manager import PortfolioManager
@@ -32,6 +33,64 @@ from safety.token_validator import TokenValidator
 from strategies.copy_trading import CopyTradingEngine
 from strategies.gem_detector import GemDetectorEngine
 from strategies.hot_trading import HotTradingEngine
+
+
+async def _fetch_wallet_balance(config: BotConfig) -> float:
+    """Fetch the real SOL balance of the configured wallet and convert to USD."""
+    wallet_key = os.getenv("WALLET_PRIVATE_KEY", "")
+    if not wallet_key:
+        return 0.0
+
+    try:
+        from solana.rpc.async_api import AsyncClient
+        from solders.keypair import Keypair
+
+        keypair = Keypair.from_base58_string(wallet_key)
+        public_key = keypair.pubkey()
+
+        rpc_url = (
+            getattr(getattr(config, "solana", None), "rpc_url", None)
+            or "https://api.mainnet-beta.solana.com"
+        )
+        rpc = AsyncClient(rpc_url)
+
+        try:
+            response = await rpc.get_balance(public_key)
+            lamports = response.value
+            sol_balance = lamports / 1e9  # Convert lamports to SOL
+
+            # Get SOL price in USD from Jupiter Price API
+            import aiohttp
+
+            price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
+            sol_mint = "So11111111111111111111111111111111111111112"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{price_url}/price?ids={sol_mint}") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        sol_price = (
+                            data.get("data", {})
+                            .get(sol_mint, {})
+                            .get("price", config.paper_trading.fallback_sol_usd)
+                        )
+                    else:
+                        sol_price = config.paper_trading.fallback_sol_usd
+
+            usd_balance = sol_balance * float(sol_price)
+            return usd_balance
+        finally:
+            await rpc.close()
+
+    except ImportError:
+        LoggerFactory.get_logger("main").error(
+            "solders/solana-py not installed — cannot fetch live balance"
+        )
+        return 0.0
+    except Exception as e:
+        LoggerFactory.get_logger("main").exception(
+            "Failed to fetch wallet balance: {}", str(e)
+        )
+        return 0.0
 
 
 class BotOrchestrator:
@@ -56,14 +115,25 @@ class BotOrchestrator:
         schema = SchemaManager(db)
         await schema.initialize()
 
-        # Core managers
-        starting_balance = config.paper_trading.starting_balance_usd
-        risk_manager = RiskManager(config.risk, db, starting_balance)
-        portfolio_manager = PortfolioManager(db, starting_balance)
-
-        # Data layer
+        # Data layer (initialized early so live balance fetch can use the RPC)
         jupiter_client = JupiterClient(config.jupiter)
         await jupiter_client.start()
+
+        # Core managers — determine starting balance based on mode
+        if config.app.mode == "live":
+            starting_balance = await _fetch_wallet_balance(config)
+            log.info("Live mode: wallet balance = ${:.2f}", starting_balance)
+            if starting_balance <= 0:
+                log.warning(
+                    "Wallet balance is $0 — live trades will fail. "
+                    "Fund your wallet first."
+                )
+        else:
+            starting_balance = config.paper_trading.starting_balance_usd
+            log.info("Paper mode: starting balance = ${:.2f}", starting_balance)
+
+        risk_manager = RiskManager(config.risk, db, starting_balance)
+        portfolio_manager = PortfolioManager(db, starting_balance)
 
         solana_data = SolanaDataFeed()
         await solana_data.start()
