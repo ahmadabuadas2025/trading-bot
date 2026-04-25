@@ -19,8 +19,18 @@ from execution.jupiter_executor import JupiterExecutor
 
 log = LoggerFactory.get_logger("arbitrage_engine")
 
+BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+RAY_MINT = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+WIF_MINT = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+
 DEFAULT_PAIRS: list[tuple[str, str]] = [
     (SOL_MINT, USDC_MINT),
+    (SOL_MINT, BONK_MINT),
+    (SOL_MINT, JUP_MINT),
+    (SOL_MINT, RAY_MINT),
+    (SOL_MINT, WIF_MINT),
+    (USDC_MINT, JUP_MINT),
 ]
 
 

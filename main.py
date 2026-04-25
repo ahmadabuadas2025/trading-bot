@@ -25,6 +25,8 @@ from core.schema import SchemaManager
 from data.jupiter_client import JupiterClient
 from data.liquidity_tracker import LiquidityTracker
 from data.solana_data import SolanaDataFeed
+from data.token_discovery import TokenDiscoveryWorker
+from data.volume_feed import VolumeFeedWorker
 from data.wallet_tracker import WalletTracker
 from execution.jupiter_executor import JupiterExecutor
 from safety.anti_rug import AntiRugEngine
@@ -200,6 +202,22 @@ class BotOrchestrator:
 
         strategies = [copy_engine, hot_engine, gem_engine]
 
+        # Data ingestion workers
+        token_discovery = TokenDiscoveryWorker(
+            gem_engine=gem_engine,
+            hot_engine=hot_engine,
+            jupiter_client=jupiter_client,
+            liquidity_tracker=liquidity_tracker,
+            solana_data=solana_data,
+            birdeye_api_key=os.getenv("BIRDEYE_API_KEY", ""),
+        )
+
+        volume_feed = VolumeFeedWorker(
+            hot_engine=hot_engine,
+            jupiter_client=jupiter_client,
+            birdeye_api_key=os.getenv("BIRDEYE_API_KEY", ""),
+        )
+
         log.info("All modules initialized successfully")
         log.info(
             "Strategies: Copy={}, Hot={}, Gem={}, Arb={}",
@@ -214,6 +232,8 @@ class BotOrchestrator:
             asyncio.create_task(self._strategy_loop(strategies, risk_manager, log)),
             asyncio.create_task(arb_engine.start()),
             asyncio.create_task(self._portfolio_snapshot_loop(portfolio_manager, log)),
+            asyncio.create_task(token_discovery.run()),
+            asyncio.create_task(volume_feed.run()),
         ]
 
         try:
@@ -221,6 +241,8 @@ class BotOrchestrator:
         finally:
             log.info("Shutting down...")
             arb_engine.stop()
+            token_discovery.stop()
+            volume_feed.stop()
             for task in self._tasks:
                 task.cancel()
 
@@ -238,14 +260,19 @@ class BotOrchestrator:
         log: object,
     ) -> None:
         """Run strategy scan/execute/check_exits loops."""
+        cycle_count = 0
         while not self._shutdown_event.is_set():
             if risk_manager.is_shutdown():
                 await asyncio.sleep(5)
                 continue
 
+            cycle_count += 1
+            total_signals = 0
+
             for strategy in strategies:
                 try:
                     signals = await strategy.scan()
+                    total_signals += len(signals)
                     for sig in signals:
                         await strategy.execute(sig)
                     await strategy.check_exits()
@@ -253,6 +280,15 @@ class BotOrchestrator:
                     LoggerFactory.get_logger("main").exception(
                         "Error in strategy {}", strategy.name
                     )
+
+            # Log status every 30 cycles (~60 seconds)
+            if cycle_count % 30 == 0:
+                LoggerFactory.get_logger("main").info(
+                    "Scan cycle #{}: {} signals found across {} strategies",
+                    cycle_count,
+                    total_signals,
+                    len(strategies),
+                )
 
             await asyncio.sleep(2)
 
