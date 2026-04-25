@@ -11,6 +11,7 @@ from core.logger import LoggerFactory
 from data.jupiter_client import JupiterClient
 from data.liquidity_tracker import LiquidityTracker
 from data.solana_data import SolanaDataFeed
+from data.volume_feed import VolumeFeedWorker
 from strategies.gem_detector import GemDetectorEngine
 from strategies.hot_trading import HotTradingEngine
 
@@ -31,6 +32,7 @@ class TokenDiscoveryWorker:
         jupiter_client: JupiterClient,
         liquidity_tracker: LiquidityTracker,
         solana_data: SolanaDataFeed,
+        volume_feed: VolumeFeedWorker | None = None,
         birdeye_api_key: str = "",
         poll_interval: float = 15.0,
     ) -> None:
@@ -39,6 +41,7 @@ class TokenDiscoveryWorker:
         self._jupiter = jupiter_client
         self._liquidity = liquidity_tracker
         self._solana_data = solana_data
+        self._volume_feed = volume_feed
         self._birdeye_key = birdeye_api_key or os.getenv("BIRDEYE_API_KEY", "")
         self._poll_interval = poll_interval
         self._seen_tokens: set[str] = set()
@@ -66,6 +69,9 @@ class TokenDiscoveryWorker:
                         new_count += 1
 
                         self._gem_engine.add_candidate(address)
+
+                        if self._volume_feed is not None:
+                            self._volume_feed.track_token(address)
 
                         volume = token.get("volume", 0.0)
                         if volume > 0:

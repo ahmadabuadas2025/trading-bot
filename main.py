@@ -203,18 +203,19 @@ class BotOrchestrator:
         strategies = [copy_engine, hot_engine, gem_engine]
 
         # Data ingestion workers
+        volume_feed = VolumeFeedWorker(
+            hot_engine=hot_engine,
+            jupiter_client=jupiter_client,
+            birdeye_api_key=os.getenv("BIRDEYE_API_KEY", ""),
+        )
+
         token_discovery = TokenDiscoveryWorker(
             gem_engine=gem_engine,
             hot_engine=hot_engine,
             jupiter_client=jupiter_client,
             liquidity_tracker=liquidity_tracker,
             solana_data=solana_data,
-            birdeye_api_key=os.getenv("BIRDEYE_API_KEY", ""),
-        )
-
-        volume_feed = VolumeFeedWorker(
-            hot_engine=hot_engine,
-            jupiter_client=jupiter_client,
+            volume_feed=volume_feed,
             birdeye_api_key=os.getenv("BIRDEYE_API_KEY", ""),
         )
 
