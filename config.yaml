@@ -32,6 +32,11 @@ copy_trading:
   position_size_pct_of_signal: 0.15
   stop_loss_pct: -0.12
   take_profit_pct: 0.35
+  # Add wallet addresses of profitable traders you want to copy.
+  # Copy trading will not produce trades until this list is populated.
+  # Example:
+  #   - "YourTargetWalletAddress1..."
+  #   - "YourTargetWalletAddress2..."
   tracked_wallets: []
 
 hot_trading:

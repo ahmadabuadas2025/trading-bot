@@ -237,6 +237,34 @@ pytest -v
 pytest tests/test_risk_manager.py
 ```
 
+## Copy Trading Setup
+
+The copy trading strategy requires you to populate the `tracked_wallets` list in
+`config.yaml` with Solana wallet addresses of profitable traders you want to
+mirror. Without any tracked wallets the copy trading engine will not produce
+trades. Example:
+
+```yaml
+copy_trading:
+  tracked_wallets:
+    - "WalletAddress1..."
+    - "WalletAddress2..."
+```
+
+## Data Ingestion
+
+The bot includes two background workers that continuously discover tokens and
+feed data into the strategy engines:
+
+- **TokenDiscoveryWorker** — polls DexScreener (free) and Birdeye (optional) for
+  new Solana token pairs and feeds them to the Gem Detector and Hot Trading
+  engines.
+- **VolumeFeedWorker** — polls volume data for tracked tokens and feeds it to
+  the Hot Trading engine for momentum detection.
+
+Set `BIRDEYE_API_KEY` in your `.env` for enhanced token data. DexScreener is used
+as the primary source and does not require an API key.
+
 ## Risk Disclaimer
 
 > **This software is provided for educational and research purposes only.**
