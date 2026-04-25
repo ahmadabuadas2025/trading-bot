@@ -116,6 +116,7 @@ class JupiterExecutor:
             client = JupiterClient(jupiter_config)
             await client.start()
 
+            rpc = None
             try:
                 amount_lamports = int(amount_usd / self._sol_price * 1e9) if input_mint == SOL_MINT else int(amount_usd * 1e6)
 
@@ -176,7 +177,11 @@ class JupiterExecutor:
                 log.info("[LIVE] Swap executed: tx={}", tx_sig[:16] if tx_sig else "unknown")
                 return record
             finally:
-                await client.close()
+                try:
+                    if rpc:
+                        await rpc.close()
+                finally:
+                    await client.close()
 
         except ImportError:
             log.error("solders/solana-py not available for live trading")
