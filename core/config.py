@@ -110,6 +110,12 @@ class SafetyConfig(BaseModel):
     honeypot_check_enabled: bool = True
 
 
+class SolanaConfig(BaseModel):
+    """Solana network configuration."""
+
+    rpc_url: str = "https://api.mainnet-beta.solana.com"
+
+
 class DashboardConfig(BaseModel):
     """Dashboard configuration."""
 
@@ -136,6 +142,7 @@ class BotConfig(BaseModel):
     gem_detector: GemDetectorConfig = Field(default_factory=GemDetectorConfig)
     arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    solana: SolanaConfig = Field(default_factory=SolanaConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
 
