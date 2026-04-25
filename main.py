@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import signal
+import sys
 
 from arbitrage.arbitrage_engine import ArbitrageEngine
 from arbitrage.mev_protection import MEVProtection
@@ -228,8 +229,9 @@ def main() -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, bot.shutdown)
+    if sys.platform != "win32":
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, bot.shutdown)
 
     try:
         loop.run_until_complete(bot.start())
