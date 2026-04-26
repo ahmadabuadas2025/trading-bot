@@ -137,7 +137,7 @@ async def _bootstrap(args: argparse.Namespace) -> tuple[AppConfig, dict[str, Any
         http,
         cfg.secrets.openrouter_api_key,
         llm_cfg.get("base_url", "https://openrouter.ai/api/v1"),
-        llm_cfg.get("model", "qwen/qwen3-coder-480b-a35b-instruct:free"),
+        llm_cfg.get("model", "nvidia/nemotron-3-super-120b-a12b:free"),
         llm_cfg.get("fallback_model", "nvidia/nemotron-3-super-120b-a12b:free"),
         int(llm_cfg.get("request_timeout_seconds", 60)),
     )
