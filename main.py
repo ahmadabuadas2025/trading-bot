@@ -383,6 +383,13 @@ class BotOrchestrator:
         # Emergency stop
         if state.get("emergency_stop"):
             log.warning("Emergency stop triggered from dashboard")
+            # Clear the flag so the bot can restart without manual file editing
+            state["emergency_stop"] = False
+            try:
+                with open(STATE_FILE, "w") as f:
+                    json.dump(state, f, indent=2)
+            except OSError:
+                pass
             self._shutdown_event.set()
             return
 
@@ -390,6 +397,7 @@ class BotOrchestrator:
         new_mode = state.get("mode")
         if (
             new_mode
+            and new_mode in ("paper", "live")
             and self._config is not None
             and new_mode != self._config.app.mode
         ):
