@@ -1,4 +1,4 @@
-"""Config loader for SolanaMemBot.
+"""Config loader for SolanaTradingBot.
 
 Loads :file:`config.yaml` for all non-secret parameters and the
 process environment / ``.env`` file for secrets. Provides strongly
@@ -73,7 +73,7 @@ class AppConfig:
 
         Args:
             bucket_name: One of ``HOT_TRADER``, ``COPY_TRADER``,
-                ``GEM_HUNTER`` or ``NEW_LISTING``.
+                ``GEM_HUNTER`` or ``ARBITRAGE``.
 
         Returns:
             The bucket configuration mapping.

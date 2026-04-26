@@ -2,7 +2,7 @@
 
 Before any bucket opens a position the orchestrator asks the
 DedupManager whether another bucket already holds the same coin.
-Priority: GEM_HUNTER > NEW_LISTING > COPY_TRADER > HOT_TRADER.
+Priority: GEM_HUNTER > ARBITRAGE > COPY_TRADER > HOT_TRADER.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ class DedupManager:
 
     BUCKET_PRIORITY: tuple[str, ...] = (
         "GEM_HUNTER",
-        "NEW_LISTING",
+        "ARBITRAGE",
         "COPY_TRADER",
         "HOT_TRADER",
     )

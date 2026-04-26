@@ -1,4 +1,4 @@
-"""SQLite schema and initial data for SolanaMemBot.
+"""SQLite schema and initial data for SolanaTradingBot.
 
 Exposes :class:`SchemaManager` which creates every table and seeds
 the four fund buckets on first run. Re-running is safe because every
@@ -221,7 +221,7 @@ DEFAULT_BUCKETS: tuple[SeedBucket, ...] = (
     SeedBucket("HOT_TRADER", 0.10, "Fast scalping on trending coins."),
     SeedBucket("COPY_TRADER", 0.30, "Mirror top active wallets."),
     SeedBucket("GEM_HUNTER", 0.40, "Hidden low-cap gems, LLM validated."),
-    SeedBucket("NEW_LISTING", 0.20, "Brand new listings, LLM validated."),
+    SeedBucket("ARBITRAGE", 0.20, "Cross-DEX arbitrage on Solana."),
 )
 
 

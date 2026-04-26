@@ -1,4 +1,4 @@
-# SolanaMemBot runtime dependencies
+# SolanaTradingBot runtime dependencies
 aiohttp>=3.9
 aiosqlite>=0.20
 loguru>=0.7

@@ -46,7 +46,7 @@ class HttpClient:
         circuit_breaker_failures: int = 5,
         circuit_breaker_cooldown_seconds: float = 60.0,
         default_timeout_seconds: float = 20.0,
-        user_agent: str = "SolanaMemBot/0.1",
+        user_agent: str = "SolanaTradingBot/0.1",
     ) -> None:
         """Create the client.
 

@@ -60,8 +60,8 @@ class LLMClient:
         return {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://localhost/solana-mem-bot",
-            "X-Title": "SolanaMemBot",
+            "HTTP-Referer": "https://localhost/solana-trading-bot",
+            "X-Title": "SolanaTradingBot",
         }
 
     async def chat_json(

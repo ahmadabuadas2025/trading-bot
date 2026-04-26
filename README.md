@@ -1,8 +1,9 @@
-# SolanaMemBot
+# Solana Trading Bot
 
-A personal, config-driven Solana meme-coin trading bot with four
-independent fund buckets, math-driven fast scoring, and a twice-daily
-LLM social-intelligence layer.
+A personal, config-driven Solana trading bot with multiple strategies
+including momentum scalping, copy trading, gem hunting, and cross-DEX
+arbitrage. Features math-driven fast scoring and a twice-daily LLM
+social-intelligence layer.
 
 ## Philosophy
 
@@ -22,8 +23,9 @@ core/         Infrastructure: db, config, logging, http, scoring, regime,
 clients/      External API clients: dexscreener, birdeye, helius,
               coingecko, jupiter.
 services/     Bucket services: hot_trader, copy_trading, gem_detector,
-              new_listing.
+              arbitrage.
 utils/        Shared helpers: honeypot checker, time utils.
+dashboard/    Modular Streamlit dashboard package.
 tests/        Pytest unit tests (math and safety modules).
 ```
 
