@@ -70,6 +70,15 @@ def main() -> None:
     mode = st.sidebar.selectbox(
         "Trading Mode", mode_options, index=default_mode_idx, key="trading_mode",
     )
+
+    # Show notice if mode differs from what the bot was started with
+    if mode != cfg.app.mode:
+        st.sidebar.warning(
+            f"\u26a0\ufe0f Bot was started in **{cfg.app.mode}** mode. "
+            f"Switching to **{mode}** requires restarting the bot with:\n\n"
+            f"`python main.py --mode {mode}`"
+        )
+
     if st.sidebar.button("Emergency Stop", type="primary"):
         st.session_state["emergency_stop"] = True
 

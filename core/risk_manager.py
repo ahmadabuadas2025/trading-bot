@@ -86,6 +86,11 @@ class RiskManager:
         """Return whether the risk manager has triggered a shutdown."""
         return self._shutdown
 
+    def force_shutdown(self) -> None:
+        """Force shutdown triggered externally (e.g., dashboard emergency stop)."""
+        self._shutdown = True
+        log.warning("Trading forcefully shut down via external trigger")
+
     async def _trigger_shutdown(self) -> None:
         """Shut down all trading and log a risk event."""
         self._shutdown = True

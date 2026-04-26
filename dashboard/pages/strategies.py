@@ -57,7 +57,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
     st.subheader("PnL by Strategy")
     labels = [s.replace("_", " ").title() for s in STRATEGIES]
     values = [strategy_pnl.get(s, 0) for s in STRATEGIES]
-    st.plotly_chart(pnl_bar_chart(labels, values), use_container_width=True)
+    st.plotly_chart(pnl_bar_chart(labels, values), width="stretch")
 
     for strategy in STRATEGIES:
         display_name = strategy.replace("_", " ").title()
@@ -82,7 +82,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
                 params=(strategy,),
             )
             if not trades_df.empty:
-                st.dataframe(trades_df, use_container_width=True)
+                st.dataframe(trades_df, width="stretch")
             else:
                 st.info(f"No trades recorded for {display_name} yet.")
 
