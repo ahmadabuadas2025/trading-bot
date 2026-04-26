@@ -79,8 +79,8 @@ safety:
   honeypot_check_enabled: true
 
 solana:
-  rpc_url: "https://mainnet.helius-rpc.com/?api-key=a1425afc-46ad-4fa1-a154-b40e3a413844"  # CHANGE THIS to your Helius/Tatum RPC for reliable live mode
-
+  #"https://mainnet.helius-rpc.com/?api-key=a1425afc-46ad-4fa1-a154-b40e3a413844"  # CHANGE THIS to your Helius/Tatum RPC for reliable live mode
+  rpc_url: "https://mainnet.helius-rpc.com/?api-key=610f5fb0-ddaa-49ae-8425-0840f4e62594"
 dashboard:
   refresh_interval_seconds: 5
 
