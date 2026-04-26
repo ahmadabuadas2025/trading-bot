@@ -2,52 +2,14 @@
 
 from __future__ import annotations
 
-import json
-import os
 import sqlite3
-from urllib.request import Request, urlopen
 
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from dotenv import load_dotenv
 
 from dashboard.db import df, scalar
-
-
-def _fetch_live_sol_balance() -> float | None:
-    """Fetch real SOL balance from wallet via Solana RPC."""
-    load_dotenv(override=False)
-    pub_key = os.getenv("WALLET_PUBLIC_KEY")
-    rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
-    if not pub_key:
-        return None
-    body = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getBalance",
-        "params": [pub_key],
-    }).encode()
-    req = Request(rpc_url, data=body, headers={"Content-Type": "application/json"})
-    try:
-        with urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        lamports = data.get("result", {}).get("value", 0)
-        return lamports / 1e9
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _fetch_sol_price_usd() -> float:
-    """Fetch current SOL/USD price from CoinGecko."""
-    try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"
-        req = Request(url, headers={"Accept": "application/json"})
-        with urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        return float(data["solana"]["usd"])
-    except Exception:  # noqa: BLE001
-        return 150.0
+from dashboard.wallet import fetch_live_sol_balance, fetch_sol_price_usd
 
 
 def render_kpis(conn: sqlite3.Connection) -> None:
@@ -56,13 +18,17 @@ def render_kpis(conn: sqlite3.Connection) -> None:
         conn, "SELECT trading_mode FROM safety_state WHERE id = 1", default="paper",
     )
 
-    sol_balance: float | None = None
     if current_mode == "live":
-        sol_balance = _fetch_live_sol_balance()
-        if sol_balance is not None:
-            sol_price = _fetch_sol_price_usd()
+        sol_balance = fetch_live_sol_balance()
+        sol_price = fetch_sol_price_usd() if sol_balance is not None else None
+        if sol_balance is not None and sol_price is not None:
             total_balance = sol_balance * sol_price
             balance_label = f"Wallet ({sol_balance:.4f} SOL)"
+        elif sol_balance is not None:
+            total_balance = scalar(
+                conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0,
+            )
+            balance_label = "Portfolio (price unavailable)"
         else:
             total_balance = scalar(
                 conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0,
@@ -136,9 +102,9 @@ def render_equity_curve(conn: sqlite3.Connection) -> None:
         conn, "SELECT trading_mode FROM safety_state WHERE id = 1", default="paper",
     )
     if current_mode == "live":
-        sol_balance = _fetch_live_sol_balance()
-        if sol_balance is not None:
-            sol_price = _fetch_sol_price_usd()
+        sol_balance = fetch_live_sol_balance()
+        sol_price = fetch_sol_price_usd() if sol_balance is not None else None
+        if sol_balance is not None and sol_price is not None:
             start_balance = sol_balance * sol_price
         else:
             start_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
