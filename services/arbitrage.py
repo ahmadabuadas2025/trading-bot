@@ -130,21 +130,23 @@ class ArbitrageService(BaseBucket):
                     continue
                 if price_low > price_high:
                     price_low, price_high = price_high, price_low
-                    low, high = high, low
+                    low_pair, high_pair = high, low
+                else:
+                    low_pair, high_pair = low, high
                 spread_pct = (price_high - price_low) / price_low
                 if spread_pct >= min_spread:
                     opps.append({
                         "token_addr": token_addr,
-                        "buy_pair": low,
-                        "sell_pair": high,
+                        "buy_pair": low_pair,
+                        "sell_pair": high_pair,
                         "buy_price": price_low,
                         "sell_price": price_high,
                         "spread_pct": spread_pct,
                         "buy_liq": float(
-                            (low.get("liquidity") or {}).get("usd") or 0.0
+                            (low_pair.get("liquidity") or {}).get("usd") or 0.0
                         ),
                         "sell_liq": float(
-                            (high.get("liquidity") or {}).get("usd") or 0.0
+                            (high_pair.get("liquidity") or {}).get("usd") or 0.0
                         ),
                     })
         return opps
