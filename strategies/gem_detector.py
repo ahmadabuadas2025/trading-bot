@@ -161,11 +161,15 @@ class GemDetectorEngine(BaseStrategy):
         pnl_pct: float,
     ) -> None:
         """Close a gem position by selling the token."""
-        await self._executor.execute_swap(
+        result = await self._executor.execute_swap(
             input_mint=token_address,
             output_mint="So11111111111111111111111111111111111111112",
             amount_usd=amount_usd,
         )
+
+        if not result:
+            log.error("Sell swap FAILED for {} — position kept open", token_address[:8])
+            return
 
         pnl = amount_usd * pnl_pct
         self._portfolio.release(self.name, amount_usd, pnl)
