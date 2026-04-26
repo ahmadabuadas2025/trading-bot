@@ -14,7 +14,7 @@ from data.jupiter_client import SOL_MINT, USDC_MINT, JupiterClient
 def jupiter_config() -> JupiterConfig:
     return JupiterConfig(
         base_url="https://quote-api.jup.ag/v6",
-        price_api_url="https://price.jup.ag/v6",
+        price_api_url="https://api.jup.ag/price/v2",
         default_slippage_bps=100,
         request_timeout_seconds=15,
         max_retries=3,

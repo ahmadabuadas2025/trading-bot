@@ -57,7 +57,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
 | Module | API Endpoint | Purpose | Requires Key |
 |---|---|---|---|
 | JupiterClient | `quote-api.jup.ag/v6/quote` | Swap quotes & routing | No |
-| JupiterClient | `price.jup.ag/v6/price` | Token prices | No |
+| JupiterClient | `api.jup.ag/price/v2` | Token prices | No |
 | SolanaDataFeed | Solana RPC / Helius RPC | Token info, holders, age | HELIUS_API_KEY (optional) |
 | WalletTracker | Helius API / Solana RPC | Smart money tx tracking | HELIUS_API_KEY (optional) |
 | LiquidityTracker | Birdeye API | Token liquidity | BIRDEYE_API_KEY (**required**) |
