@@ -68,6 +68,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
     # --- Section 3: Strategy Data Flow Status ---------------------------------
     st.subheader("Strategy Data Flow")
 
+    cfg = None
     try:
         from core.config import ConfigManager
 
@@ -202,7 +203,8 @@ def render(db_path: str = DEFAULT_DB) -> None:
     st.subheader("Scan Cycle Monitor")
     scan_interval = 2
     try:
-        scan_interval = cfg.arbitrage.scan_interval_seconds
+        if cfg is not None:
+            scan_interval = cfg.arbitrage.scan_interval_seconds
     except Exception:
         pass
     st.info(
