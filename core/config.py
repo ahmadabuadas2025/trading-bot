@@ -45,7 +45,7 @@ class JupiterConfig(BaseModel):
     """Jupiter DEX API configuration."""
 
     base_url: str = "https://quote-api.jup.ag/v6"
-    price_api_url: str = "https://price.jup.ag/v6"
+    price_api_url: str = "https://api.jup.ag/price/v2"
     default_slippage_bps: int = 100
     max_slippage_bps: int = 150
     request_timeout_seconds: int = 15

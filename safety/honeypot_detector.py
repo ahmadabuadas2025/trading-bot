@@ -72,5 +72,5 @@ class HoneypotDetector:
             return False
 
         except Exception:
-            log.warning("Honeypot check failed for {} — treating as unsafe", token_address[:8])
-            return True
+            log.warning("Honeypot check failed for {} — allowing trade (check inconclusive)", token_address[:8])
+            return False

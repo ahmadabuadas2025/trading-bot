@@ -9,7 +9,7 @@ app:
 risk:
   max_risk_per_trade_pct: 0.02
   max_daily_drawdown_pct: 0.05
-  max_open_trades_per_strategy: 3
+  max_open_trades_per_strategy: 5  # allow more concurrent trades
   auto_shutdown_on_breach: true
 
 paper_trading:
@@ -18,7 +18,7 @@ paper_trading:
 
 jupiter:
   base_url: "https://quote-api.jup.ag/v6"
-  price_api_url: "https://price.jup.ag/v6"
+  price_api_url: "https://api.jup.ag/price/v2"
   default_slippage_bps: 100
   max_slippage_bps: 150
   request_timeout_seconds: 15
@@ -37,20 +37,26 @@ copy_trading:
   # Example:
   #   - "YourTargetWalletAddress1..."
   #   - "YourTargetWalletAddress2..."
-  tracked_wallets: []
+  tracked_wallets:
+    # IMPORTANT: Add wallet addresses of profitable Solana traders here.
+    # Copy trading will NOT work until this list is populated.
+    # Find active profitable wallets on birdeye.so or solscan.io
+    # Example format:
+    # - "WalletPublicKeyHere..."
+    []
 
 hot_trading:
   enabled: true
-  volume_spike_multiplier: 3.0
-  volume_spike_window_seconds: 300
+  volume_spike_multiplier: 2.0    # lowered for more signals
+  volume_spike_window_seconds: 180  # shorter window for faster detection
   take_profit_pct: 0.02
   stop_loss_pct: -0.0075
   max_hold_seconds: 120
 
 gem_detector:
   enabled: true
-  min_liquidity_usd: 30000
-  min_holders: 100
+  min_liquidity_usd: 10000    # lowered — 30000 too strict for new tokens
+  min_holders: 30              # lowered — 100 too strict for new tokens
   allocation_pct: 0.02
   take_profit_multiplier: 3.0
   stop_loss_pct: -0.30

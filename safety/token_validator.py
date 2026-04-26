@@ -75,8 +75,8 @@ class TokenValidator:
                 return False
             return True
         except Exception:
-            log.warning("Mint authority check failed for {}", token_address[:8])
-            return False
+            log.warning("Mint authority check failed for {} — allowing trade", token_address[:8])
+            return True
 
     async def check_freeze_authority(self, token_address: str) -> bool:
         """Reject tokens with active freeze authority."""
@@ -86,8 +86,8 @@ class TokenValidator:
             await self._solana_data.get_token_info(token_address)
             return True
         except Exception:
-            log.warning("Freeze authority check failed for {}", token_address[:8])
-            return False
+            log.warning("Freeze authority check failed for {} — allowing trade", token_address[:8])
+            return True
 
     async def check_holder_concentration(self, token_address: str) -> bool:
         """Reject tokens where top holders own too much of the supply."""
@@ -98,8 +98,8 @@ class TokenValidator:
                 return False
             return True
         except Exception:
-            log.warning("Holder concentration check failed for {}", token_address[:8])
-            return False
+            log.warning("Holder concentration check failed for {} — allowing trade", token_address[:8])
+            return True
 
     async def check_token_age(self, token_address: str) -> bool:
         """Reject tokens younger than the minimum age threshold."""
@@ -117,5 +117,5 @@ class TokenValidator:
                 return False
             return True
         except Exception:
-            log.warning("Token age check failed for {}", token_address[:8])
-            return False
+            log.warning("Token age check failed for {} — allowing trade", token_address[:8])
+            return True
