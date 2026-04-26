@@ -9,7 +9,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 from core.config import ConfigManager
-from dashboard.pages import arbitrage_panel, portfolio, strategies, trade_logs
+from dashboard.pages import arbitrage_panel, data_scanner, portfolio, strategies, trade_logs
 
 STATE_FILE = Path("data/dashboard_state.json")
 
@@ -58,7 +58,7 @@ def main() -> None:
 
     page = st.sidebar.radio(
         "Navigation",
-        ["Portfolio", "Strategies", "Arbitrage", "Trade Logs"],
+        ["Portfolio", "Strategies", "Arbitrage", "Trade Logs", "Data Scanner"],
     )
 
     st.sidebar.markdown("---")
@@ -147,6 +147,8 @@ def main() -> None:
         arbitrage_panel.render()
     elif page == "Trade Logs":
         trade_logs.render()
+    elif page == "Data Scanner":
+        data_scanner.render()
 
 
 if __name__ == "__main__":
