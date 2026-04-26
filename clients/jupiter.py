@@ -1,4 +1,4 @@
-"""Jupiter v6 swap client (live mode only).
+"""Jupiter swap client (v1 API) (live mode only).
 
 The live executor calls :meth:`JupiterClient.quote` and
 :meth:`JupiterClient.build_swap_tx` to obtain a signed-transaction
@@ -14,10 +14,10 @@ from core.http import HttpClient
 
 
 class JupiterClient:
-    """Wrapper over Jupiter's public v6 API."""
+    """Wrapper over Jupiter's public swap API."""
 
-    QUOTE_URL: str = "https://quote-api.jup.ag/v6/quote"
-    SWAP_URL: str = "https://quote-api.jup.ag/v6/swap"
+    QUOTE_URL: str = "https://api.jup.ag/swap/v1/quote"
+    SWAP_URL: str = "https://api.jup.ag/swap/v1/swap"
     WSOL_MINT: str = "So11111111111111111111111111111111111111112"
 
     def __init__(self, http: HttpClient) -> None:
