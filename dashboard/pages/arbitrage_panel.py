@@ -54,7 +54,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
     profits = [r.get("actual_profit_usd", 0) or 0 for r in reversed(records)]
     st.plotly_chart(
         cumulative_profit_chart(timestamps, profits, "Cumulative Arb Profit"),
-        width="stretch",
+        use_container_width=True,
     )
 
     st.subheader("Recent Opportunities")
@@ -64,6 +64,6 @@ def render(db_path: str = DEFAULT_DB) -> None:
         "expected_profit_usd", "actual_profit_usd", "status", "timestamp",
     ]
     available_cols = [c for c in display_cols if c in df.columns]
-    st.dataframe(df[available_cols], width="stretch")
+    st.dataframe(df[available_cols], use_container_width=True)
 
     conn.close()

@@ -70,7 +70,7 @@ def render(db_path: str = DEFAULT_DB) -> None:
         ]
 
     st.subheader(f"Showing {len(filtered)} trades")
-    st.dataframe(filtered, width="stretch", height=500)
+    st.dataframe(filtered, use_container_width=True, height=500)
 
     st.subheader("Summary")
     summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
