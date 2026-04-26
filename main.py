@@ -80,14 +80,14 @@ async def _fetch_wallet_balance(config: BotConfig) -> float:
 
             import aiohttp  # noqa: WPS433
 
-            price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
+            price_url = config.jupiter.price_api_url or "https://api.jup.ag/price/v2"
             sol_mint = "So11111111111111111111111111111111111111112"
 
             sol_price = config.paper_trading.fallback_sol_usd  # default fallback
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        f"{price_url}/price?ids={sol_mint}",
+                        f"{price_url}?ids={sol_mint}",
                         timeout=aiohttp.ClientTimeout(total=10),
                     ) as resp:
                         log.info("Jupiter Price API status: {}", resp.status)
@@ -184,11 +184,11 @@ async def _fetch_spl_token_balances(
             return 0.0
 
         # Fetch prices for all mints from Jupiter
-        price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
+        price_url = config.jupiter.price_api_url or "https://api.jup.ag/price/v2"
         mint_ids = ",".join(mint_balances.keys())
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{price_url}/price?ids={mint_ids}",
+                f"{price_url}?ids={mint_ids}",
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 price_data: dict[str, dict[str, object]] = {}
@@ -248,10 +248,13 @@ class BotOrchestrator:
             starting_balance = await _fetch_wallet_balance(config)
             log.info("Live mode: wallet balance = ${:.2f}", starting_balance)
             if starting_balance <= 0:
-                log.warning(
-                    "Wallet balance is $0 — live trades will fail. "
-                    "Fund your wallet first."
+                log.error(
+                    "Wallet balance is $0 — this will block all trades. "
+                    "Check your WALLET_PRIVATE_KEY, RPC URL, and wallet funding. "
+                    "Falling back to paper mode."
                 )
+                config.app.mode = "paper"
+                starting_balance = config.paper_trading.starting_balance_usd
         else:
             starting_balance = config.paper_trading.starting_balance_usd
             log.info("Paper mode: starting balance = ${:.2f}", starting_balance)
@@ -275,7 +278,10 @@ class BotOrchestrator:
         anti_rug = AntiRugEngine(token_validator, honeypot_detector)
 
         # Execution
-        executor = JupiterExecutor(config)
+        from execution.trade_logger import TradeLogger
+
+        trade_logger = TradeLogger(db)
+        executor = JupiterExecutor(config, jupiter_client=jupiter_client, trade_logger=trade_logger)
         self._config = config
         self._executor = executor
 
@@ -323,6 +329,7 @@ class BotOrchestrator:
             route_scanner=route_scanner,
             mev_protection=mev_protection,
             executor=executor,
+            jupiter_client=jupiter_client,
         )
 
         strategies = [copy_engine, hot_engine, gem_engine]

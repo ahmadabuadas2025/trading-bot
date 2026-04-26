@@ -139,7 +139,8 @@ class WalletTracker:
         losses = stats.get("losses", 0)
         total = wins + losses
         if total < 5:
-            return False
+            # Not enough data — assume profitable (will be validated over time)
+            return True
         return (wins / total) >= min_win_rate
 
     def update_wallet_stats(self, wallet: str, won: bool) -> None:
