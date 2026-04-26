@@ -7,7 +7,7 @@
   "arbitrage_enabled": true,
   "max_risk_pct": 2.0,
   "max_drawdown_pct": 5.0,
-  "max_open_trades": 10,
+  "max_open_trades": 3,
   "slippage_bps": 100,
-  "refresh_interval": 15
+  "refresh_interval": 5
 }
