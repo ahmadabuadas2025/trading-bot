@@ -63,6 +63,7 @@ class ArbitrageEngine:
         mev_protection: MEVProtection,
         executor: JupiterExecutor,
         token_pairs: list[tuple[str, str]] | None = None,
+        jupiter_client: object | None = None,
     ) -> None:
         self._config = config
         self._db = db
@@ -72,6 +73,7 @@ class ArbitrageEngine:
         self._mev = mev_protection
         self._executor = executor
         self._pairs = token_pairs or DEFAULT_PAIRS
+        self._jupiter = jupiter_client
         self._consecutive_failures: int = 0
         self._active_trades: int = 0
         self._running: bool = False
@@ -118,8 +120,28 @@ class ArbitrageEngine:
         for input_mint, output_mint in self._pairs:
             balance = self._portfolio.get_balance()
             max_capital = balance * self._config.max_capital_pct
+
+            if max_capital < 0.01:
+                continue
+
             decimals = _TOKEN_DECIMALS.get(input_mint, 9)
-            amount = int(max_capital * (10**decimals))
+
+            try:
+                if input_mint == USDC_MINT:
+                    amount = int(max_capital * (10 ** decimals))
+                else:
+                    sol_price = 150.0
+                    if self._jupiter:
+                        try:
+                            fetched = await self._jupiter.get_token_price(SOL_MINT)
+                            if fetched > 0:
+                                sol_price = fetched
+                        except Exception:
+                            pass
+                    token_amount = max_capital / sol_price
+                    amount = int(token_amount * (10 ** decimals))
+            except Exception:
+                continue
 
             opportunity = await self._scanner.find_arbitrage_opportunity(
                 input_mint=input_mint,

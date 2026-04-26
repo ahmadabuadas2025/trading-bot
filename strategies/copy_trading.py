@@ -112,7 +112,7 @@ class CopyTradingEngine(BaseStrategy):
             input_mint="So11111111111111111111111111111111111111112",
             output_mint=signal.token_address,
             amount_usd=signal.amount_usd,
-            slippage_bps=self._config.stop_loss_pct,
+            # slippage_bps uses default from config (stop_loss_pct was incorrectly passed here)
         )
 
         if record:
@@ -147,10 +147,16 @@ class CopyTradingEngine(BaseStrategy):
     async def _close_position(
         self, token_address: str, trade: TradeRecord, pnl_pct: float
     ) -> None:
-        """Close a position and release funds."""
+        """Close a position by selling the token."""
+        await self._executor.execute_swap(
+            input_mint=token_address,
+            output_mint="So11111111111111111111111111111111111111112",
+            amount_usd=trade.amount_usd,
+        )
+
         pnl = trade.amount_usd * pnl_pct
         self._portfolio.release(self.name, trade.amount_usd, pnl)
         self._portfolio.remove_position(self.name, token_address)
         await self._risk.record_trade_result(self.name, pnl)
         del self._open_trades[token_address]
-        log.info("Closed {} PnL: ${:.2f}", token_address[:8], pnl)
+        log.info("Copy trade closed {}: PnL ${:.2f}", token_address[:8], pnl)

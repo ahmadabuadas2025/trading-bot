@@ -174,9 +174,16 @@ class HotTradingEngine(BaseStrategy):
         amount_usd: float,
         pnl_pct: float,
     ) -> None:
-        """Close a hot trade position."""
-        pnl = amount_usd * pnl_pct
-        self._portfolio.release(self.name, amount_usd, pnl)
+        """Close a hot trade position by selling the token."""
+        await self._executor.execute_swap(
+            input_mint=token_address,
+            output_mint="So11111111111111111111111111111111111111112",
+            amount_usd=amount_usd,
+        )
+
+        actual_pnl = amount_usd * pnl_pct
+        self._portfolio.release(self.name, amount_usd, actual_pnl)
         self._portfolio.remove_position(self.name, token_address)
-        await self._risk.record_trade_result(self.name, pnl)
+        await self._risk.record_trade_result(self.name, actual_pnl)
         del self._open_trades[token_address]
+        log.info("Hot trade closed {}: PnL ${:.2f} ({:.2%})", token_address[:8], actual_pnl, pnl_pct)

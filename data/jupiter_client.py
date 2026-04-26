@@ -110,7 +110,7 @@ class JupiterClient:
             Token price in USD.
         """
         session = self._ensure_session()
-        url = f"{self._config.price_api_url}/price"
+        url = self._config.price_api_url
         params = {"ids": token_address}
         async with session.get(url, params=params) as resp:
             resp.raise_for_status()

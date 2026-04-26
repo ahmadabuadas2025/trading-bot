@@ -6,10 +6,15 @@ import os
 import time
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from core.config import BotConfig
 from core.logger import LoggerFactory
 from core.models import TradeRecord, TradeSide, TradeStatus
+
+if TYPE_CHECKING:
+    from data.jupiter_client import JupiterClient
+    from execution.trade_logger import TradeLogger
 
 log = LoggerFactory.get_logger("executor")
 
@@ -21,11 +26,18 @@ class JupiterExecutor:
     Live mode: signs and sends transactions using wallet private key.
     """
 
-    def __init__(self, config: BotConfig) -> None:
+    def __init__(
+        self,
+        config: BotConfig,
+        jupiter_client: JupiterClient | None = None,
+        trade_logger: TradeLogger | None = None,
+    ) -> None:
         self._config = config
         self._wallet_private_key: str = os.getenv("WALLET_PRIVATE_KEY", "")
         self._is_paper = config.app.mode == "paper"
         self._sol_price: float = config.paper_trading.fallback_sol_usd
+        self._jupiter_client = jupiter_client
+        self._trade_logger = trade_logger
 
     async def execute_swap(
         self,
@@ -55,6 +67,18 @@ class JupiterExecutor:
             return await self._paper_execute(input_mint, output_mint, amount_usd, slippage, start_time)
         return await self._live_execute(input_mint, output_mint, amount_usd, slippage, start_time)
 
+    async def _update_sol_price(self) -> None:
+        """Fetch current SOL price from Jupiter for accurate simulations."""
+        if self._jupiter_client:
+            try:
+                from data.jupiter_client import SOL_MINT
+
+                price = await self._jupiter_client.get_token_price(SOL_MINT)
+                if price > 0:
+                    self._sol_price = price
+            except Exception:
+                pass  # keep existing price
+
     async def _paper_execute(
         self,
         input_mint: str,
@@ -64,6 +88,7 @@ class JupiterExecutor:
         start_time: float,
     ) -> TradeRecord:
         """Simulate a trade in paper mode."""
+        await self._update_sol_price()
         execution_time = (time.time() - start_time) * 1000
 
         simulated_price = amount_usd / max(self._sol_price, 1.0)
@@ -90,6 +115,8 @@ class JupiterExecutor:
             amount_usd,
             self._sol_price,
         )
+        if self._trade_logger:
+            await self._trade_logger.log_trade(record)
         return record
 
     async def _live_execute(
@@ -110,15 +137,28 @@ class JupiterExecutor:
             return None
 
         try:
-            from data.jupiter_client import SOL_MINT, JupiterClient
+            from data.jupiter_client import SOL_MINT, USDC_MINT
 
-            jupiter_config = self._config.jupiter
-            client = JupiterClient(jupiter_config)
-            await client.start()
+            await self._update_sol_price()
+
+            client = self._jupiter_client
+            _local_client = False
+            if client is None:
+                from data.jupiter_client import JupiterClient
+
+                client = JupiterClient(self._config.jupiter)
+                await client.start()
+                _local_client = True
 
             rpc = None
             try:
-                amount_lamports = int(amount_usd / self._sol_price * 1e9) if input_mint == SOL_MINT else int(amount_usd * 1e6)
+                if input_mint == SOL_MINT:
+                    amount_lamports = int(amount_usd / self._sol_price * 1e9)
+                elif input_mint == USDC_MINT:
+                    amount_lamports = int(amount_usd * 1e6)
+                else:
+                    # For other tokens, estimate via SOL price as rough proxy
+                    amount_lamports = int(amount_usd / self._sol_price * 1e9)
 
                 quote = await client.get_quote(
                     input_mint=input_mint,
@@ -175,13 +215,16 @@ class JupiterExecutor:
                     execution_time_ms=execution_time,
                 )
                 log.info("[LIVE] Swap executed: tx={}", tx_sig[:16] if tx_sig else "unknown")
+                if self._trade_logger:
+                    await self._trade_logger.log_trade(record)
                 return record
             finally:
                 try:
                     if rpc:
                         await rpc.close()
                 finally:
-                    await client.close()
+                    if _local_client:
+                        await client.close()
 
         except ImportError:
             log.error("solders/solana-py not available for live trading")
