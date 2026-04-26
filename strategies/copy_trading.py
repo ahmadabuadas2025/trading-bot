@@ -148,11 +148,15 @@ class CopyTradingEngine(BaseStrategy):
         self, token_address: str, trade: TradeRecord, pnl_pct: float
     ) -> None:
         """Close a position by selling the token."""
-        await self._executor.execute_swap(
+        result = await self._executor.execute_swap(
             input_mint=token_address,
             output_mint="So11111111111111111111111111111111111111112",
             amount_usd=trade.amount_usd,
         )
+
+        if not result:
+            log.error("Sell swap FAILED for {} — position kept open", token_address[:8])
+            return
 
         pnl = trade.amount_usd * pnl_pct
         self._portfolio.release(self.name, trade.amount_usd, pnl)

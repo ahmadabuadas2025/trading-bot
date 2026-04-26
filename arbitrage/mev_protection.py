@@ -110,5 +110,5 @@ class MEVProtection:
                 return False
             return True
         except Exception:
-            log.warning("Liquidity check failed for route safety — allowing known pair")
-            return True
+            log.warning("Liquidity check failed for {} — blocking unknown token", opportunity.output_mint[:8])
+            return False
