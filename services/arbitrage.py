@@ -263,30 +263,37 @@ class ArbitrageService(BaseBucket):
             )
 
             # Execute the sell leg immediately to complete the arb.
-            sell_price = best["sell_price"]
-            sell_liq = best["sell_liq"]
-            sell_req = await self._build_trade(
-                addr,
-                sym,
-                "sell",
-                sell_price,
-                size_usd=size_usd,
-                liquidity_usd=sell_liq,
-                position_id=pid,
-            )
-            pnl = await self._deps.executor.sell(sell_req, "arb_spread")
-            self._log.info(
-                "arb_sell {} pnl={:.4f} pos_id={}",
-                sym, pnl, pid,
-            )
+            # Wrapped in try/except so a failed sell doesn't abort the
+            # remaining token scan — manage_positions will clean up any
+            # residual OPEN positions within max_hold_minutes.
+            try:
+                sell_price = best["sell_price"]
+                sell_liq = best["sell_liq"]
+                sell_req = await self._build_trade(
+                    addr,
+                    sym,
+                    "sell",
+                    sell_price,
+                    size_usd=size_usd,
+                    liquidity_usd=sell_liq,
+                    position_id=pid,
+                )
+                pnl = await self._deps.executor.sell(sell_req, "arb_spread")
+                self._log.info(
+                    "arb_sell {} pnl={:.4f} pos_id={}",
+                    sym, pnl, pid,
+                )
 
-            # Run post-close bookkeeping.
-            pos_row = await self._deps.db.fetchone(
-                "SELECT * FROM positions WHERE id = ?", (pid,)
-            )
-            if pos_row:
-                pnl_pct = pnl / max(size_usd, 1e-9)
-                await self.on_close(pos_row, pnl_pct)
+                pos_row = await self._deps.db.fetchone(
+                    "SELECT * FROM positions WHERE id = ?", (pid,)
+                )
+                if pos_row:
+                    pnl_pct = pnl / max(size_usd, 1e-9)
+                    await self.on_close(pos_row, pnl_pct)
+            except Exception as err:  # noqa: BLE001
+                self._log.warning(
+                    "arb sell leg failed for {} pos_id={}: {}", sym, pid, err
+                )
 
             opened += 1
         return opened
