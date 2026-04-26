@@ -6,16 +6,15 @@ and wallet info panel.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
-from urllib.request import Request, urlopen
 
 import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
 
 from dashboard.db import df, scalar
+from dashboard.wallet import fetch_live_sol_balance, fetch_sol_price_usd
 
 
 def render_safety_banner(conn: sqlite3.Connection) -> None:
@@ -103,41 +102,6 @@ def render_buckets(conn: sqlite3.Connection) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _fetch_live_sol_balance() -> float | None:
-    """Fetch real SOL balance from wallet via Solana RPC."""
-    load_dotenv(override=False)
-    pub_key = os.getenv("WALLET_PUBLIC_KEY")
-    rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
-    if not pub_key:
-        return None
-    body = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getBalance",
-        "params": [pub_key],
-    }).encode()
-    req = Request(rpc_url, data=body, headers={"Content-Type": "application/json"})
-    try:
-        with urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        lamports = data.get("result", {}).get("value", 0)
-        return lamports / 1e9
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _fetch_sol_price_usd() -> float:
-    """Fetch current SOL/USD price from CoinGecko."""
-    try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"
-        req = Request(url, headers={"Accept": "application/json"})
-        with urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        return float(data["solana"]["usd"])
-    except Exception:  # noqa: BLE001
-        return 150.0
-
-
 def render_wallet_info(conn: sqlite3.Connection) -> None:
     """Show wallet / balance details depending on trading mode."""
     st.subheader("Wallet Info")
@@ -146,10 +110,13 @@ def render_wallet_info(conn: sqlite3.Connection) -> None:
     )
 
     if current_mode == "live":
-        sol_balance = _fetch_live_sol_balance()
+        sol_balance = fetch_live_sol_balance()
         if sol_balance is not None:
-            sol_price = _fetch_sol_price_usd()
-            usd_value = sol_balance * sol_price
+            sol_price = fetch_sol_price_usd()
+            if sol_price is not None:
+                usd_value = sol_balance * sol_price
+            else:
+                usd_value = None
             load_dotenv(override=False)
             pub_key = os.getenv("WALLET_PUBLIC_KEY", "")
             truncated = f"{pub_key[:6]}...{pub_key[-4:]}" if len(pub_key) > 10 else pub_key
@@ -157,13 +124,16 @@ def render_wallet_info(conn: sqlite3.Connection) -> None:
             with c1:
                 st.metric("SOL Balance", f"{sol_balance:.4f} SOL")
             with c2:
-                st.metric("USD Value", f"${usd_value:,.2f}")
+                if usd_value is not None:
+                    st.metric("USD Value", f"${usd_value:,.2f}")
+                else:
+                    st.metric("USD Value", "price unavailable")
             with c3:
                 st.metric("Wallet", truncated)
         else:
             st.warning(
-                "Live mode active but WALLET_PUBLIC_KEY is not set in .env. "
-                "Showing paper balance as fallback."
+                "Live mode active but wallet balance could not be fetched. "
+                "Check WALLET_PUBLIC_KEY in .env. Showing paper balance as fallback."
             )
             paper_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
             st.metric("Paper Balance", f"${paper_balance:,.2f}")
