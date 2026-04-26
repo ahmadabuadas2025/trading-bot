@@ -61,7 +61,7 @@ def _perform_reset() -> None:
         for bucket_name, allocation_pct in buckets:
             alloc = float(allocation_pct)
             # Normalize: if > 1, treat as percentage
-            if alloc > 1:
+            if alloc >= 1:
                 alloc = alloc / 100.0
             new_balance = round(starting_balance * alloc, 6)
             rw.execute(
@@ -334,7 +334,7 @@ def render(conn_ro: sqlite3.Connection) -> None:
     if st.sidebar.button(
         "Reset Bot",
         type="primary",
-        disabled=not confirm_reset,
+        disabled=not confirm_reset or open_count > 0,
         key="reset_bot_btn",
     ):
         _perform_reset()
