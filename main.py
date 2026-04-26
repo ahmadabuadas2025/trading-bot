@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import signal
 import sys
@@ -202,6 +203,9 @@ async def _fetch_spl_token_balances(
     return spl_usd_total
 
 
+STATE_FILE = "data/dashboard_state.json"
+
+
 class BotOrchestrator:
     """Main orchestrator that wires all modules and runs the trading loop."""
 
@@ -209,6 +213,8 @@ class BotOrchestrator:
         self._config_manager = ConfigManager(config_path, mode)
         self._shutdown_event = asyncio.Event()
         self._tasks: list[asyncio.Task[None]] = []
+        self._config: BotConfig | None = None
+        self._executor: JupiterExecutor | None = None
 
     async def start(self) -> None:
         """Bootstrap all modules and start trading engines."""
@@ -260,6 +266,8 @@ class BotOrchestrator:
 
         # Execution
         executor = JupiterExecutor(config)
+        self._config = config
+        self._executor = executor
 
         # Strategies
         copy_engine = CopyTradingEngine(
@@ -361,6 +369,40 @@ class BotOrchestrator:
             await db.close()
             log.info("Shutdown complete")
 
+    def _sync_dashboard_state(self, log: object) -> None:
+        """Read dashboard_state.json and apply runtime changes (mode, emergency stop)."""
+        try:
+            state_path = STATE_FILE
+            if not os.path.exists(state_path):
+                return
+            with open(state_path) as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return
+
+        # Emergency stop
+        if state.get("emergency_stop"):
+            log.warning("Emergency stop triggered from dashboard")
+            self._shutdown_event.set()
+            return
+
+        # Mode switch
+        new_mode = state.get("mode")
+        if (
+            new_mode
+            and self._config is not None
+            and new_mode != self._config.app.mode
+        ):
+            old_mode = self._config.app.mode
+            self._config.app.mode = new_mode
+            if self._executor is not None:
+                self._executor._is_paper = new_mode == "paper"
+            log.info(
+                "Mode switched from {} to {} via dashboard",
+                old_mode,
+                new_mode,
+            )
+
     async def _strategy_loop(
         self,
         strategies: list[CopyTradingEngine | HotTradingEngine | GemDetectorEngine],
@@ -370,6 +412,9 @@ class BotOrchestrator:
         """Run strategy scan/execute/check_exits loops."""
         cycle_count = 0
         while not self._shutdown_event.is_set():
+            # Check for dashboard state changes every cycle
+            self._sync_dashboard_state(log)
+
             if risk_manager.is_shutdown():
                 await asyncio.sleep(5)
                 continue
