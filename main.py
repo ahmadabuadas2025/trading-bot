@@ -136,6 +136,7 @@ async def _fetch_spl_token_balances(
 
     spl_usd_total = 0.0
     try:
+        from solana.rpc.types import TokenAccountOpts  # noqa: WPS433
         from solders.pubkey import Pubkey  # noqa: WPS433
 
         token_program = Pubkey.from_string(
@@ -143,7 +144,7 @@ async def _fetch_spl_token_balances(
         )
         token_resp = await rpc.get_token_accounts_by_owner_json_parsed(
             public_key,
-            opts={"programId": token_program},
+            opts=TokenAccountOpts(program_id=token_program),
         )
 
         accounts = token_resp.value or []
