@@ -9,6 +9,7 @@ the cheaper pool and sell on the more expensive one.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from clients.dexscreener import DexScreenerClient
@@ -260,11 +261,68 @@ class ArbitrageService(BaseBucket):
                 best["sell_price"],
                 pid,
             )
+
+            # Execute the sell leg immediately to complete the arb.
+            sell_price = best["sell_price"]
+            sell_liq = best["sell_liq"]
+            sell_req = await self._build_trade(
+                addr,
+                sym,
+                "sell",
+                sell_price,
+                size_usd=size_usd,
+                liquidity_usd=sell_liq,
+                position_id=pid,
+            )
+            pnl = await self._deps.executor.sell(sell_req, "arb_spread")
+            self._log.info(
+                "arb_sell {} pnl={:.4f} pos_id={}",
+                sym, pnl, pid,
+            )
+
+            # Run post-close bookkeeping.
+            pos_row = await self._deps.db.fetchone(
+                "SELECT * FROM positions WHERE id = ?", (pid,)
+            )
+            if pos_row:
+                pnl_pct = pnl / max(size_usd, 1e-9)
+                await self.on_close(pos_row, pnl_pct)
+
             opened += 1
         return opened
 
+    def _hold_exceeded(self, position: dict[str, Any]) -> bool:
+        """Check whether a position has exceeded max_hold_minutes.
+
+        Args:
+            position: Row from ``positions``.
+
+        Returns:
+            True if hold time exceeds the configured maximum.
+        """
+        max_hold = float(self._cfg.get("max_hold_minutes", 5))
+        opened_at = position.get("opened_at")
+        if not opened_at:
+            return False
+        try:
+            if isinstance(opened_at, str):
+                opened_dt = datetime.fromisoformat(opened_at).replace(
+                    tzinfo=UTC
+                )
+            else:
+                opened_dt = opened_at
+            elapsed = (self._deps.time.now() - opened_dt).total_seconds() / 60.0
+            return elapsed >= max_hold
+        except (ValueError, TypeError):
+            return False
+
     async def manage_positions(self) -> int:
-        """Exit arb positions quickly (max_hold_minutes is short).
+        """Exit arb positions that exceeded max_hold_minutes.
+
+        Most arb positions are closed immediately in scan_and_enter
+        (both legs executed atomically). This method catches any
+        residual open positions that were not closed — e.g. if the
+        sell leg failed — and force-exits them after max_hold_minutes.
 
         Returns:
             Number of positions closed this tick.
@@ -289,6 +347,8 @@ class ArbitrageService(BaseBucket):
                 (detail.get("liquidity") or {}).get("usd") or 0.0
             )
             reason = await self.exit_check(row, price, liquidity)
+            if reason is None and self._hold_exceeded(row):
+                reason = "max_hold_exceeded"
             if reason is None:
                 continue
             req = await self._build_trade(
