@@ -1,8 +1,8 @@
-# SolanaMemBot parameter file.
+# SolanaTradingBot parameter file.
 # Secrets live in .env. Everything else lives here.
 
 app:
-  name: SolanaMemBot
+  name: SolanaTradingBot
   timezone: UTC
   log_level: INFO
   db_path: data/bot.db
@@ -32,20 +32,20 @@ buckets:
   HOT_TRADER:
     enabled: true
     allocation_pct: 0.10
-    description: Fast scalping on trending coins.
+    description: Fast scalping on high-volume coins.
     position_size_pct: 0.03
     stop_loss_pct: -0.04
     take_profit_pct: 0.08
     max_hold_minutes: 30
-    max_open_positions: 5
-    scan_interval_seconds: 300
-    price_check_interval_seconds: 15
+    max_open_positions: 8
+    scan_interval_seconds: 120
+    price_check_interval_seconds: 10
     use_llm: false
     entry:
-      min_volume_1h_usd: 100000
-      min_liq_usd: 50000
-      min_price_change_5m_pct: 0.02
-      min_price_change_1h_pct: 0.08
+      min_volume_1h_usd: 50000
+      min_liq_usd: 30000
+      min_price_change_5m_pct: 0.01
+      min_price_change_1h_pct: 0.03
   COPY_TRADER:
     enabled: true
     allocation_pct: 0.30
@@ -80,20 +80,22 @@ buckets:
       max_liq_usd: 500000
       min_vol_liq_ratio: 3.0
       max_age_hours: 24
-  NEW_LISTING:
+  ARBITRAGE:
     enabled: true
     allocation_pct: 0.20
-    description: Brand new listings, LLM validated.
-    position_size_pct: 0.02
-    stop_loss_pct: -0.20
-    take_profit_pct: 0.60
-    max_hold_minutes: 120
+    description: Cross-DEX arbitrage on Solana.
+    position_size_pct: 0.05
+    stop_loss_pct: -0.02
+    take_profit_pct: 0.03
+    max_hold_minutes: 5
     max_open_positions: 3
-    scan_interval_seconds: 180
-    use_llm: true
+    scan_interval_seconds: 60
+    price_check_interval_seconds: 10
+    use_llm: false
     entry:
-      min_liq_usd: 5000
-      max_age_minutes: 30
+      min_spread_pct: 0.005
+      min_volume_1h_usd: 50000
+      min_liq_usd: 20000
 
 scoring:
   # Profile A: LLM data available.
@@ -130,17 +132,17 @@ regime:
       HOT_TRADER: 1.0
       COPY_TRADER: 1.0
       GEM_HUNTER: 1.0
-      NEW_LISTING: 1.0
+      ARBITRAGE: 1.0
     NEUTRAL:
       HOT_TRADER: 0.5
       COPY_TRADER: 0.5
       GEM_HUNTER: 0.5
-      NEW_LISTING: 0.5
+      ARBITRAGE: 0.5
     BEARISH:
       HOT_TRADER: 0.0
       COPY_TRADER: 0.25
       GEM_HUNTER: 0.25
-      NEW_LISTING: 0.0
+      ARBITRAGE: 0.0
 
 safety:
   check_interval_seconds: 300

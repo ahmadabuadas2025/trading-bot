@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "solana-mem-bot"
 version = "0.1.0"
-description = "Personal automated Solana meme-coin trading bot."
+description = "Personal automated Solana trading bot with multiple strategies."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "SolanaMemBot" }]
+authors = [{ name = "SolanaTradingBot" }]
 dependencies = [
     "aiohttp>=3.9",
     "aiosqlite>=0.20",
@@ -32,7 +32,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["core", "clients", "services", "utils"]
+packages = ["core", "clients", "services", "utils", "dashboard"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

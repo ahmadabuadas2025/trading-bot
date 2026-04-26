@@ -1,6 +1,6 @@
-"""HOT_TRADER bucket: fast scalping on trending Solana meme coins.
+"""HOT_TRADER bucket: fast scalping on high-volume Solana coins.
 
-Polls DexScreener top-boosts/latest-boosts every N minutes, filters on
+Polls DexScreener across multiple queries every N minutes, filters on
 volume/liquidity/momentum thresholds, and scalps with tight stops.
 No LLM validation — speed matters here.
 """
@@ -57,8 +57,8 @@ class HotTraderService(BaseBucket):
         if vol_1h < float(entry.get("min_volume_1h_usd", 100000)):
             return False
         if (
-            change_5m < float(entry.get("min_price_change_5m_pct", 0.02))
-            and change_1h < float(entry.get("min_price_change_1h_pct", 0.08))
+            change_5m < float(entry.get("min_price_change_5m_pct", 0.01))
+            and change_1h < float(entry.get("min_price_change_1h_pct", 0.03))
         ):
             return False
         return True
@@ -69,11 +69,13 @@ class HotTraderService(BaseBucket):
         Returns:
             A list of pair dicts ready for entry.
         """
+        queries = ["solana", "trending", "raydium", "orca", "jupiter", "meteora"]
         pairs: list[dict[str, Any]] = []
-        try:
-            pairs += await self._dex.search("trending")
-        except Exception:  # noqa: BLE001
-            pass
+        for q in queries:
+            try:
+                pairs += await self._dex.search(q)
+            except Exception:  # noqa: BLE001
+                pass
         # Boost endpoints return slim records; hydrate via token detail.
         try:
             for boost in (await self._dex.top_boosts())[:20]:
@@ -86,12 +88,20 @@ class HotTraderService(BaseBucket):
         except Exception:  # noqa: BLE001
             pass
         seen: set[str] = set()
-        filtered: list[dict[str, Any]] = []
+        deduped: list[dict[str, Any]] = []
         for p in pairs:
             addr = (p.get("baseToken") or {}).get("address")
             if not addr or addr in seen:
                 continue
             seen.add(addr)
+            deduped.append(p)
+        # Sort by 1h volume descending and take top 40.
+        deduped.sort(
+            key=lambda p: float((p.get("volume") or {}).get("h1") or 0.0),
+            reverse=True,
+        )
+        filtered: list[dict[str, Any]] = []
+        for p in deduped[:40]:
             if self._passes_entry(p):
                 filtered.append(p)
         return filtered

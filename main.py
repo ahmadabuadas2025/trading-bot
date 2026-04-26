@@ -1,4 +1,4 @@
-"""SolanaMemBot CLI entry point.
+"""SolanaTradingBot CLI entry point.
 
 Usage:
     python main.py --mode paper     # default
@@ -38,11 +38,11 @@ from core.scoring_engine import ScoringEngine
 from core.slippage_model import SlippageModel
 from core.social_collector import SocialCollector
 from core.time_utils import TimeProvider
+from services.arbitrage import ArbitrageService
 from services.base_bucket import BucketDeps
 from services.copy_trading import CopyTradingService, MockWalletProvider
 from services.gem_detector import GemDetectorService
 from services.hot_trader import HotTraderService
-from services.new_listing import NewListingService
 from utils.honeypot import HoneypotChecker
 
 
@@ -52,7 +52,7 @@ def _parse_args() -> argparse.Namespace:
     Returns:
         The parsed argparse namespace.
     """
-    parser = argparse.ArgumentParser(description="SolanaMemBot")
+    parser = argparse.ArgumentParser(description="SolanaTradingBot")
     parser.add_argument("--mode", choices=["paper", "live"], default=None)
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--llm-dry-run", action="store_true")
@@ -68,10 +68,10 @@ def _banner(cfg: AppConfig, log) -> None:
     """
     if cfg.mode == "live":
         log.warning("=" * 58)
-        log.warning("SolanaMemBot starting in LIVE MODE — real funds at risk")
+        log.warning("SolanaTradingBot starting in LIVE MODE — real funds at risk")
         log.warning("=" * 58)
     else:
-        log.info("SolanaMemBot starting in PAPER mode (no real trades)")
+        log.info("SolanaTradingBot starting in PAPER mode (no real trades)")
 
 
 def _build_executor(
@@ -172,9 +172,7 @@ async def _bootstrap(args: argparse.Namespace) -> tuple[AppConfig, dict[str, Any
     gem = GemDetectorService(
         deps, cfg.bucket("GEM_HUNTER"), dex, scoring, scanner, atr, honeypot
     )
-    listing = NewListingService(
-        deps, cfg.bucket("NEW_LISTING"), dex, scoring, scanner, honeypot
-    )
+    arb = ArbitrageService(deps, cfg.bucket("ARBITRAGE"), dex, jupiter, scoring)
     runners: list[BucketRunner] = [
         BucketRunner(
             hot,
@@ -192,9 +190,9 @@ async def _bootstrap(args: argparse.Namespace) -> tuple[AppConfig, dict[str, Any
             60.0,
         ),
         BucketRunner(
-            listing,
-            float(cfg.bucket("NEW_LISTING")["scan_interval_seconds"]),
-            float(cfg.bucket("NEW_LISTING")["scan_interval_seconds"]),
+            arb,
+            float(cfg.bucket("ARBITRAGE")["scan_interval_seconds"]),
+            float(cfg.bucket("ARBITRAGE").get("price_check_interval_seconds", 10)),
         ),
     ]
     orch = Orchestrator(runners, regime, safety, scanner, log_factory, cfg.raw)

@@ -18,9 +18,9 @@ def _client() -> RegimeClient:
         "bearish_btc_threshold": -0.05,
         "bearish_fg_threshold": 35,
         "multipliers": {
-            "BULLISH": {"HOT_TRADER": 1.0, "GEM_HUNTER": 1.0, "NEW_LISTING": 1.0, "COPY_TRADER": 1.0},
-            "NEUTRAL": {"HOT_TRADER": 0.5, "GEM_HUNTER": 0.5, "NEW_LISTING": 0.5, "COPY_TRADER": 0.5},
-            "BEARISH": {"HOT_TRADER": 0.0, "GEM_HUNTER": 0.25, "NEW_LISTING": 0.0, "COPY_TRADER": 0.25},
+            "BULLISH": {"HOT_TRADER": 1.0, "GEM_HUNTER": 1.0, "ARBITRAGE": 1.0, "COPY_TRADER": 1.0},
+            "NEUTRAL": {"HOT_TRADER": 0.5, "GEM_HUNTER": 0.5, "ARBITRAGE": 0.5, "COPY_TRADER": 0.5},
+            "BEARISH": {"HOT_TRADER": 0.0, "GEM_HUNTER": 0.25, "ARBITRAGE": 0.0, "COPY_TRADER": 0.25},
         },
     }
     # HttpClient and Database aren't used by _classify / get_multiplier.

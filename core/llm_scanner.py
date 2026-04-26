@@ -20,7 +20,7 @@ from core.social_collector import SocialCollector
 from core.time_utils import TimeProvider
 
 SYSTEM_PROMPT: str = (
-    "You are a professional crypto analyst specializing in Solana meme coins. "
+    "You are a professional crypto analyst specializing in Solana tokens. "
     "You will be given pre-collected social media data and on-chain metrics "
     "for each coin. Analyze the provided data and rank coins by pump "
     "potential. Respond ONLY with valid JSON, no other text whatsoever."
@@ -126,7 +126,7 @@ class LLMScanner:
             )
         body = {
             "instructions": (
-                "Rank the following Solana meme coins. Use the social data to "
+                "Rank the following Solana tokens. Use the social data to "
                 "assess community strength. Respond with ONLY the specified JSON."
             ),
             "schema": {

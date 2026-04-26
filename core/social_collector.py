@@ -128,7 +128,7 @@ class SocialCollector:
                 data = await self._http.request_json(
                     "GET", url,
                     params={"q": symbol, "sort": "new", "t": "day", "limit": 10},
-                    headers={"User-Agent": "SolanaMemBot/0.1 (Reddit read-only)"},
+                    headers={"User-Agent": "SolanaTradingBot/0.1 (Reddit read-only)"},
                 )
             except Exception:  # noqa: BLE001
                 continue
