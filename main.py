@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import signal
 import sys
@@ -18,6 +17,7 @@ from arbitrage.arbitrage_engine import ArbitrageEngine
 from arbitrage.mev_protection import MEVProtection
 from arbitrage.route_scanner import RouteScanner
 from core.config import BotConfig, ConfigManager
+from core.dashboard_bridge import DashboardBridge
 from core.database import Database
 from core.logger import LoggerFactory
 from core.portfolio_manager import PortfolioManager
@@ -39,20 +39,21 @@ from strategies.hot_trading import HotTradingEngine
 
 
 async def _fetch_wallet_balance(config: BotConfig) -> float:
-    """Fetch the real wallet balance (SOL + SPL tokens) and convert to USD."""
+    """Fetch the real SOL balance of the configured wallet and convert to USD."""
     log = LoggerFactory.get_logger("main")
+
     wallet_key = os.getenv("WALLET_PRIVATE_KEY", "")
     if not wallet_key:
-        log.error("WALLET_PRIVATE_KEY not set in .env — cannot fetch balance")
+        log.error("WALLET_PRIVATE_KEY is not set in .env — returning $0")
         return 0.0
 
     try:
         from solana.rpc.async_api import AsyncClient
         from solders.keypair import Keypair  # noqa: WPS433
 
-        log.info("solders/solana packages loaded successfully")
+        log.info("solders/solana packages loaded OK")
     except ImportError:
-        log.error("solders/solana-py not installed. Run: pip install solders solana")
+        log.error("solders or solana-py not installed. Run: pip install solders solana")
         return 0.0
 
     try:
@@ -71,55 +72,66 @@ async def _fetch_wallet_balance(config: BotConfig) -> float:
             response = await rpc.get_balance(public_key)
             lamports = response.value
             sol_balance = lamports / 1e9
-            log.info(
-                "Wallet SOL balance: {} SOL ({} lamports)", sol_balance, lamports
-            )
+            log.info("SOL balance: {} SOL ({} lamports)", sol_balance, lamports)
 
-            # Get SOL price in USD from Jupiter Price API
+            if sol_balance <= 0:
+                log.warning("Wallet SOL balance is 0 — check if the correct wallet key is configured")
+                return 0.0
+
             import aiohttp  # noqa: WPS433
 
-            price_url = (
-                config.jupiter.price_api_url or "https://price.jup.ag/v6"
-            )
+            price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
             sol_mint = "So11111111111111111111111111111111111111112"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{price_url}/price?ids={sol_mint}",
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        sol_price = (
-                            data.get("data", {})
-                            .get(sol_mint, {})
-                            .get(
-                                "price",
-                                config.paper_trading.fallback_sol_usd,
+
+            sol_price = config.paper_trading.fallback_sol_usd  # default fallback
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{price_url}/price?ids={sol_mint}",
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as resp:
+                        log.info("Jupiter Price API status: {}", resp.status)
+                        if resp.status == 200:
+                            data = await resp.json()
+                            fetched_price = (
+                                data.get("data", {})
+                                .get(sol_mint, {})
+                                .get("price")
                             )
-                        )
-                        log.info("SOL price from Jupiter: ${}", sol_price)
-                    else:
-                        sol_price = config.paper_trading.fallback_sol_usd
-                        log.warning(
-                            "Jupiter Price API returned status {} — using"
-                            " fallback ${}",
-                            resp.status,
-                            sol_price,
-                        )
+                            if fetched_price:
+                                sol_price = float(fetched_price)
+                                log.info("SOL price from Jupiter: ${}", sol_price)
+                            else:
+                                log.warning(
+                                    "Jupiter returned no price data, using fallback ${}",
+                                    sol_price,
+                                )
+                        else:
+                            body = await resp.text()
+                            log.warning(
+                                "Jupiter Price API error {}: {} — using fallback ${}",
+                                resp.status,
+                                body[:200],
+                                sol_price,
+                            )
+            except Exception as price_err:
+                log.warning(
+                    "Failed to fetch SOL price: {} — using fallback ${}",
+                    str(price_err),
+                    sol_price,
+                )
 
-            usd_balance = sol_balance * float(sol_price)
-            log.info("Wallet USD balance (SOL only): ${:.2f}", usd_balance)
-
-            # Also check SPL token balances (USDC and other major tokens)
-            spl_usd = await _fetch_spl_token_balances(
-                rpc, public_key, sol_price, config, log
+            usd_balance = sol_balance * sol_price
+            log.info(
+                "Wallet USD balance: ${:.2f} ({} SOL × ${:.2f})",
+                usd_balance,
+                sol_balance,
+                sol_price,
             )
-            usd_balance += spl_usd
-
-            log.info("Total wallet balance (SOL + SPL): ${:.2f}", usd_balance)
             return usd_balance
         finally:
             await rpc.close()
+
     except Exception as e:
         log.exception("Failed to fetch wallet balance: {}", str(e))
         return 0.0
@@ -203,9 +215,6 @@ async def _fetch_spl_token_balances(
     return spl_usd_total
 
 
-STATE_FILE = "data/dashboard_state.json"
-
-
 class BotOrchestrator:
     """Main orchestrator that wires all modules and runs the trading loop."""
 
@@ -249,6 +258,7 @@ class BotOrchestrator:
 
         risk_manager = RiskManager(config.risk, db, starting_balance)
         portfolio_manager = PortfolioManager(db, starting_balance)
+        dashboard_bridge = DashboardBridge()
 
         solana_data = SolanaDataFeed()
         await solana_data.start()
@@ -345,7 +355,7 @@ class BotOrchestrator:
 
         # Start concurrent loops
         self._tasks = [
-            asyncio.create_task(self._strategy_loop(strategies, risk_manager, log)),
+            asyncio.create_task(self._strategy_loop(strategies, risk_manager, log, dashboard_bridge)),
             asyncio.create_task(arb_engine.start()),
             asyncio.create_task(self._portfolio_snapshot_loop(portfolio_manager, log)),
             asyncio.create_task(token_discovery.run()),
@@ -369,59 +379,23 @@ class BotOrchestrator:
             await db.close()
             log.info("Shutdown complete")
 
-    def _sync_dashboard_state(self, log: object) -> None:
-        """Read dashboard_state.json and apply runtime changes (mode, emergency stop)."""
-        try:
-            state_path = STATE_FILE
-            if not os.path.exists(state_path):
-                return
-            with open(state_path) as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return
-
-        # Emergency stop
-        if state.get("emergency_stop"):
-            log.warning("Emergency stop triggered from dashboard")
-            # Clear the flag so the bot can restart without manual file editing
-            state["emergency_stop"] = False
-            try:
-                with open(STATE_FILE, "w") as f:
-                    json.dump(state, f, indent=2)
-            except OSError:
-                pass
-            self._shutdown_event.set()
-            return
-
-        # Mode switch
-        new_mode = state.get("mode")
-        if (
-            new_mode
-            and new_mode in ("paper", "live")
-            and self._config is not None
-            and new_mode != self._config.app.mode
-        ):
-            old_mode = self._config.app.mode
-            self._config.app.mode = new_mode
-            if self._executor is not None:
-                self._executor._is_paper = new_mode == "paper"
-            log.info(
-                "Mode switched from {} to {} via dashboard",
-                old_mode,
-                new_mode,
-            )
-
     async def _strategy_loop(
         self,
         strategies: list[CopyTradingEngine | HotTradingEngine | GemDetectorEngine],
         risk_manager: RiskManager,
         log: object,
+        dashboard_bridge: DashboardBridge,
     ) -> None:
         """Run strategy scan/execute/check_exits loops."""
         cycle_count = 0
         while not self._shutdown_event.is_set():
-            # Check for dashboard state changes every cycle
-            self._sync_dashboard_state(log)
+            # Check dashboard emergency stop
+            if dashboard_bridge.is_emergency_stop():
+                log.warning("Emergency stop triggered from dashboard!")
+                dashboard_bridge.clear_emergency_stop()
+                risk_manager.force_shutdown()
+                self._shutdown_event.set()
+                return
 
             if risk_manager.is_shutdown():
                 await asyncio.sleep(5)
@@ -431,12 +405,21 @@ class BotOrchestrator:
             total_signals = 0
 
             for strategy in strategies:
+                strategy_key = strategy.name
+                strategy_disabled = not dashboard_bridge.is_strategy_enabled(strategy_key)
+
                 try:
+                    # Always run check_exits so open positions are monitored
+                    await strategy.check_exits()
+
+                    # Only scan and execute if the strategy is enabled
+                    if strategy_disabled:
+                        continue
+
                     signals = await strategy.scan()
                     total_signals += len(signals)
                     for sig in signals:
                         await strategy.execute(sig)
-                    await strategy.check_exits()
                 except Exception:
                     LoggerFactory.get_logger("main").exception(
                         "Error in strategy {}", strategy.name
@@ -444,8 +427,8 @@ class BotOrchestrator:
 
             # Log status every 30 cycles (~60 seconds)
             if cycle_count % 30 == 0:
-                LoggerFactory.get_logger("main").info(
-                    "Scan cycle #{}: {} signals found across {} strategies",
+                log.info(
+                    "Scan cycle #{}: {} signals across {} strategies",
                     cycle_count,
                     total_signals,
                     len(strategies),

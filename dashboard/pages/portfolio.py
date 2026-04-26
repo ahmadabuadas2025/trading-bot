@@ -64,11 +64,11 @@ def render(db_path: str = DEFAULT_DB) -> None:
     st.subheader("Equity Curve")
     timestamps = [dict(r)["updated_at"] for r in reversed(portfolio_rows)]
     equities = [dict(r)["equity_usd"] for r in reversed(portfolio_rows)]
-    st.plotly_chart(equity_curve(timestamps, equities), use_container_width=True)
+    st.plotly_chart(equity_curve(timestamps, equities), width="stretch")
 
     st.subheader("Win/Loss Distribution")
     if wins + losses > 0:
-        st.plotly_chart(win_rate_pie(wins, losses), use_container_width=True)
+        st.plotly_chart(win_rate_pie(wins, losses), width="stretch")
     else:
         st.info("No completed trades yet.")
 
@@ -77,6 +77,6 @@ def render(db_path: str = DEFAULT_DB) -> None:
     )
     if not trades_df.empty:
         st.subheader("Recent Trades")
-        st.dataframe(trades_df, use_container_width=True)
+        st.dataframe(trades_df, width="stretch")
 
     conn.close()
