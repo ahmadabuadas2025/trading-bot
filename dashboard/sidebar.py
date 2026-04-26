@@ -8,10 +8,86 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import streamlit as st
 
 from dashboard.db import df, open_rw, scalar
+
+
+def _perform_reset() -> None:
+    """Delete all historical data, reset balances, and clear logs."""
+
+    # --- Database reset ---
+    with open_rw() as rw:
+        # 1. Delete all rows from transactional/history tables
+        tables_to_purge = [
+            "positions",
+            "trades",
+            "price_ticks",
+            "scores",
+            "llm_scan_results",
+            "social_data_cache",
+            "blacklist",
+            "bucket_cooldowns",
+            "regime_log",
+            "events",
+            "wallets",
+        ]
+        for table in tables_to_purge:
+            try:
+                rw.execute(f"DELETE FROM {table}")
+            except Exception:
+                pass  # table may not exist yet
+
+        # 2. Reset fund_buckets balances to starting values
+        starting_balance = 1000.0  # default fallback
+        try:
+            import yaml
+
+            config_path = Path("config.yaml")
+            if config_path.exists():
+                with open(config_path) as f:
+                    cfg = yaml.safe_load(f)
+                starting_balance = float(
+                    cfg.get("paper_trading", {}).get("starting_balance_usd", 1000.0)
+                )
+        except Exception:
+            pass
+
+        # Read current bucket allocations and reset balances
+        cursor = rw.execute("SELECT bucket_name, allocation_pct FROM fund_buckets")
+        buckets = cursor.fetchall()
+        for bucket_name, allocation_pct in buckets:
+            alloc = float(allocation_pct)
+            # Normalize: if > 1, treat as percentage
+            if alloc >= 1:
+                alloc = alloc / 100.0
+            new_balance = round(starting_balance * alloc, 6)
+            rw.execute(
+                "UPDATE fund_buckets SET balance = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE bucket_name = ?",
+                (new_balance, bucket_name),
+            )
+
+        # 3. Reset safety_state
+        rw.execute(
+            "UPDATE safety_state SET emergency_stop = 0, daily_loss_pct = 0, "
+            "stop_reason = NULL, triggered_at = NULL, reset_at = CURRENT_TIMESTAMP "
+            "WHERE id = 1"
+        )
+
+        rw.commit()
+
+    # --- Log file cleanup ---
+    log_dir = Path("logs")
+    if log_dir.exists():
+        for log_file in log_dir.iterdir():
+            try:
+                if log_file.is_file():
+                    log_file.unlink()
+            except Exception:
+                pass
 
 
 def render(conn_ro: sqlite3.Connection) -> None:
@@ -230,4 +306,37 @@ def render(conn_ro: sqlite3.Connection) -> None:
             )
             rw.commit()
         st.sidebar.success(f"{bl_symbol} blacklisted.")
+        st.rerun()
+
+    st.sidebar.divider()
+
+    # -- 7. reset bot ---------------------------------------------------------
+    st.sidebar.subheader("Reset bot")
+    st.sidebar.warning(
+        "This will delete ALL historical data (positions, trades, scores, "
+        "LLM verdicts, events, logs) and reset bucket balances to the "
+        "paper starting balance. This cannot be undone."
+    )
+
+    open_count = scalar(
+        conn_ro, "SELECT COUNT(*) FROM positions WHERE status = 'OPEN'", default=0
+    )
+    if open_count > 0:
+        st.sidebar.error(
+            f"There are {open_count} open positions. "
+            "Stop the bot and close positions before resetting."
+        )
+
+    confirm_reset = st.sidebar.checkbox(
+        "I understand this will delete all data", value=False, key="reset_confirm"
+    )
+
+    if st.sidebar.button(
+        "Reset Bot",
+        type="primary",
+        disabled=not confirm_reset or open_count > 0,
+        key="reset_bot_btn",
+    ):
+        _perform_reset()
+        st.sidebar.success("Bot has been reset. All data cleared.")
         st.rerun()
