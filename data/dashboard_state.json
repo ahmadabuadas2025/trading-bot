@@ -1,5 +1,5 @@
 {
-  "mode": "live",
+  "mode": "paper",
   "emergency_stop": false,
   "copy_trading_enabled": true,
   "hot_trading_enabled": true,
