@@ -38,61 +38,167 @@ from strategies.hot_trading import HotTradingEngine
 
 
 async def _fetch_wallet_balance(config: BotConfig) -> float:
-    """Fetch the real SOL balance of the configured wallet and convert to USD."""
+    """Fetch the real wallet balance (SOL + SPL tokens) and convert to USD."""
+    log = LoggerFactory.get_logger("main")
     wallet_key = os.getenv("WALLET_PRIVATE_KEY", "")
     if not wallet_key:
+        log.error("WALLET_PRIVATE_KEY not set in .env — cannot fetch balance")
         return 0.0
 
     try:
         from solana.rpc.async_api import AsyncClient
-        from solders.keypair import Keypair
+        from solders.keypair import Keypair  # noqa: WPS433
 
+        log.info("solders/solana packages loaded successfully")
+    except ImportError:
+        log.error("solders/solana-py not installed. Run: pip install solders solana")
+        return 0.0
+
+    try:
         keypair = Keypair.from_base58_string(wallet_key)
         public_key = keypair.pubkey()
+        log.info("Wallet public key: {}", str(public_key))
 
         rpc_url = (
             getattr(getattr(config, "solana", None), "rpc_url", None)
             or "https://api.mainnet-beta.solana.com"
         )
+        log.info("Using Solana RPC: {}", rpc_url)
         rpc = AsyncClient(rpc_url)
 
         try:
             response = await rpc.get_balance(public_key)
             lamports = response.value
-            sol_balance = lamports / 1e9  # Convert lamports to SOL
+            sol_balance = lamports / 1e9
+            log.info(
+                "Wallet SOL balance: {} SOL ({} lamports)", sol_balance, lamports
+            )
 
             # Get SOL price in USD from Jupiter Price API
-            import aiohttp
+            import aiohttp  # noqa: WPS433
 
-            price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
+            price_url = (
+                config.jupiter.price_api_url or "https://price.jup.ag/v6"
+            )
             sol_mint = "So11111111111111111111111111111111111111112"
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{price_url}/price?ids={sol_mint}") as resp:
+                async with session.get(
+                    f"{price_url}/price?ids={sol_mint}",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         sol_price = (
                             data.get("data", {})
                             .get(sol_mint, {})
-                            .get("price", config.paper_trading.fallback_sol_usd)
+                            .get(
+                                "price",
+                                config.paper_trading.fallback_sol_usd,
+                            )
                         )
+                        log.info("SOL price from Jupiter: ${}", sol_price)
                     else:
                         sol_price = config.paper_trading.fallback_sol_usd
+                        log.warning(
+                            "Jupiter Price API returned status {} — using"
+                            " fallback ${}",
+                            resp.status,
+                            sol_price,
+                        )
 
             usd_balance = sol_balance * float(sol_price)
+            log.info("Wallet USD balance (SOL only): ${:.2f}", usd_balance)
+
+            # Also check SPL token balances (USDC and other major tokens)
+            spl_usd = await _fetch_spl_token_balances(
+                rpc, public_key, sol_price, config, log
+            )
+            usd_balance += spl_usd
+
+            log.info("Total wallet balance (SOL + SPL): ${:.2f}", usd_balance)
             return usd_balance
         finally:
             await rpc.close()
-
-    except ImportError:
-        LoggerFactory.get_logger("main").error(
-            "solders/solana-py not installed — cannot fetch live balance"
-        )
-        return 0.0
     except Exception as e:
-        LoggerFactory.get_logger("main").exception(
-            "Failed to fetch wallet balance: {}", str(e)
-        )
+        log.exception("Failed to fetch wallet balance: {}", str(e))
         return 0.0
+
+
+async def _fetch_spl_token_balances(
+    rpc: object,
+    public_key: object,
+    sol_price: float,
+    config: BotConfig,
+    log: object,
+) -> float:
+    """Fetch SPL token account balances and return their total USD value."""
+    import aiohttp  # noqa: WPS433
+
+    spl_usd_total = 0.0
+    try:
+        from solders.pubkey import Pubkey  # noqa: WPS433
+
+        token_program = Pubkey.from_string(
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        )
+        token_resp = await rpc.get_token_accounts_by_owner_json_parsed(
+            public_key,
+            opts={"programId": token_program},
+        )
+
+        accounts = token_resp.value or []
+        if not accounts:
+            log.info("No SPL token accounts found")
+            return 0.0
+
+        log.info("Found {} SPL token account(s)", len(accounts))
+
+        # Collect mints and balances
+        mint_balances: dict[str, float] = {}
+        for acct in accounts:
+            try:
+                parsed = acct.account.data.parsed
+                info = parsed["info"]
+                mint = info["mint"]
+                amount = float(info["tokenAmount"]["uiAmount"] or 0)
+                if amount > 0:
+                    mint_balances[mint] = mint_balances.get(mint, 0.0) + amount
+            except (KeyError, TypeError, ValueError):
+                continue
+
+        if not mint_balances:
+            return 0.0
+
+        # Fetch prices for all mints from Jupiter
+        price_url = config.jupiter.price_api_url or "https://price.jup.ag/v6"
+        mint_ids = ",".join(mint_balances.keys())
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{price_url}/price?ids={mint_ids}",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                price_data: dict[str, dict[str, object]] = {}
+                if resp.status == 200:
+                    body = await resp.json()
+                    price_data = body.get("data", {})
+
+        for mint, amount in mint_balances.items():
+            price = float(price_data.get(mint, {}).get("price", 0) or 0)
+            usd_value = amount * price
+            if usd_value > 0.01:
+                log.info(
+                    "SPL token {}: {} (${:.2f})",
+                    mint[:8] + "...",
+                    amount,
+                    usd_value,
+                )
+                spl_usd_total += usd_value
+
+        log.info("Total SPL token value: ${:.2f}", spl_usd_total)
+    except Exception:
+        log.warning("Could not fetch SPL token balances")
+
+    return spl_usd_total
 
 
 class BotOrchestrator:
