@@ -73,7 +73,7 @@ safety:
   honeypot_check_enabled: true
 
 solana:
-  rpc_url: "https://api.mainnet-beta.solana.com"
+  rpc_url: "https://api.mainnet-beta.solana.com"  # CHANGE THIS to your Helius/Tatum RPC for reliable live mode
 
 dashboard:
   refresh_interval_seconds: 5
