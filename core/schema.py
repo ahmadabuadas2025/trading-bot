@@ -244,6 +244,7 @@ class SchemaManager:
         """
         await self._db.executescript(SCHEMA_SQL)
         await self._seed_buckets(starting_balance_usd)
+        await self._migrate_new_listing_to_arbitrage()
         await self._db.execute(
             "INSERT OR IGNORE INTO safety_state (id, emergency_stop) VALUES (1, 0)"
         )
@@ -273,3 +274,25 @@ class SchemaManager:
             "VALUES (?, ?, ?, ?, ?)",
             rows,
         )
+
+    async def _migrate_new_listing_to_arbitrage(self) -> None:
+        """Rename NEW_LISTING bucket to ARBITRAGE in existing databases.
+
+        Idempotent: safe to run on both old and new databases.
+        """
+        migrations = [
+            (
+                "UPDATE fund_buckets SET bucket_name = 'ARBITRAGE', "
+                "description = 'Cross-DEX arbitrage on Solana.' "
+                "WHERE bucket_name = 'NEW_LISTING'"
+            ),
+            "UPDATE positions SET bucket_name = 'ARBITRAGE' WHERE bucket_name = 'NEW_LISTING'",
+            "UPDATE trades SET bucket_name = 'ARBITRAGE' WHERE bucket_name = 'NEW_LISTING'",
+            "UPDATE llm_scan_results SET bucket = 'ARBITRAGE' WHERE bucket = 'NEW_LISTING'",
+            "UPDATE bucket_cooldowns SET bucket_name = 'ARBITRAGE' WHERE bucket_name = 'NEW_LISTING'",
+        ]
+        for sql in migrations:
+            try:
+                await self._db.execute(sql)
+            except Exception:  # noqa: BLE001
+                pass
