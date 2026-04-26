@@ -35,6 +35,18 @@ class DashboardBridge:
         state = self.read_state()
         return state.get("emergency_stop", False)
 
+    def clear_emergency_stop(self) -> None:
+        """Clear the emergency stop flag so the bot can restart cleanly."""
+        try:
+            if STATE_FILE.exists():
+                data = json.loads(STATE_FILE.read_text())
+                data["emergency_stop"] = False
+                STATE_FILE.write_text(json.dumps(data, indent=2))
+                self._last_state = data
+                log.info("Emergency stop flag cleared in dashboard state")
+        except Exception:
+            pass
+
     def is_strategy_enabled(self, strategy_name: str) -> bool:
         """Check if a strategy is enabled from dashboard controls."""
         state = self.read_state()

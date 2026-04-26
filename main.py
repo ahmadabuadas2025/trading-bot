@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import signal
 import sys
@@ -216,9 +215,6 @@ async def _fetch_spl_token_balances(
     return spl_usd_total
 
 
-STATE_FILE = "data/dashboard_state.json"
-
-
 class BotOrchestrator:
     """Main orchestrator that wires all modules and runs the trading loop."""
 
@@ -383,48 +379,6 @@ class BotOrchestrator:
             await db.close()
             log.info("Shutdown complete")
 
-    def _sync_dashboard_state(self, log: object) -> None:
-        """Read dashboard_state.json and apply runtime changes (mode, emergency stop)."""
-        try:
-            state_path = STATE_FILE
-            if not os.path.exists(state_path):
-                return
-            with open(state_path) as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return
-
-        # Emergency stop
-        if state.get("emergency_stop"):
-            log.warning("Emergency stop triggered from dashboard")
-            # Clear the flag so the bot can restart without manual file editing
-            state["emergency_stop"] = False
-            try:
-                with open(STATE_FILE, "w") as f:
-                    json.dump(state, f, indent=2)
-            except OSError:
-                pass
-            self._shutdown_event.set()
-            return
-
-        # Mode switch
-        new_mode = state.get("mode")
-        if (
-            new_mode
-            and new_mode in ("paper", "live")
-            and self._config is not None
-            and new_mode != self._config.app.mode
-        ):
-            old_mode = self._config.app.mode
-            self._config.app.mode = new_mode
-            if self._executor is not None:
-                self._executor._is_paper = new_mode == "paper"
-            log.info(
-                "Mode switched from {} to {} via dashboard",
-                old_mode,
-                new_mode,
-            )
-
     async def _strategy_loop(
         self,
         strategies: list[CopyTradingEngine | HotTradingEngine | GemDetectorEngine],
@@ -437,11 +391,11 @@ class BotOrchestrator:
         while not self._shutdown_event.is_set():
             # Check dashboard emergency stop
             if dashboard_bridge.is_emergency_stop():
-                if not risk_manager.is_shutdown():
-                    log.warning("Emergency stop triggered from dashboard!")
-                    risk_manager.force_shutdown()
-                await asyncio.sleep(5)
-                continue
+                log.warning("Emergency stop triggered from dashboard!")
+                dashboard_bridge.clear_emergency_stop()
+                risk_manager.force_shutdown()
+                self._shutdown_event.set()
+                return
 
             if risk_manager.is_shutdown():
                 await asyncio.sleep(5)
@@ -451,17 +405,21 @@ class BotOrchestrator:
             total_signals = 0
 
             for strategy in strategies:
-                # Check if strategy is enabled from dashboard
                 strategy_key = strategy.name
-                if not dashboard_bridge.is_strategy_enabled(strategy_key):
-                    continue
+                strategy_disabled = not dashboard_bridge.is_strategy_enabled(strategy_key)
 
                 try:
+                    # Always run check_exits so open positions are monitored
+                    await strategy.check_exits()
+
+                    # Only scan and execute if the strategy is enabled
+                    if strategy_disabled:
+                        continue
+
                     signals = await strategy.scan()
                     total_signals += len(signals)
                     for sig in signals:
                         await strategy.execute(sig)
-                    await strategy.check_exits()
                 except Exception:
                     LoggerFactory.get_logger("main").exception(
                         "Error in strategy {}", strategy.name
