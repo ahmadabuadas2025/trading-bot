@@ -8,9 +8,11 @@ the safety monitor at the configured cadence.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 
+from core.db import Database
 from core.llm_scanner import Candidate, LLMScanner
 from core.logger import LoggerFactory
 from core.regime_client import RegimeClient
@@ -44,6 +46,7 @@ class Orchestrator:
         llm_scanner: LLMScanner,
         logger: LoggerFactory,
         config: dict[str, Any],
+        db: Database,
     ) -> None:
         """Create the orchestrator.
 
@@ -54,6 +57,7 @@ class Orchestrator:
             llm_scanner: LLM scanner.
             logger: Logger factory.
             config: Full parsed config tree.
+            db: Connected database for event logging.
         """
         self._buckets = buckets
         self._regime = regime
@@ -61,11 +65,36 @@ class Orchestrator:
         self._llm = llm_scanner
         self._log = logger.get("orchestrator")
         self._cfg = config
+        self._db = db
         self._stop = asyncio.Event()
 
     def request_stop(self) -> None:
         """Ask every loop to stop on its next iteration."""
         self._stop.set()
+
+    async def _log_event(
+        self,
+        component: str,
+        level: str,
+        message: str,
+        payload: dict | None = None,
+    ) -> None:
+        """Persist a structured event row.
+
+        Args:
+            component: Source system (e.g. ``orchestrator``, bucket name).
+            level: Severity string (``INFO``, ``WARNING``, ``ERROR``).
+            message: Human-readable description.
+            payload: Optional JSON-serialisable dict.
+        """
+        try:
+            await self._db.execute(
+                "INSERT INTO events (component, level, message, payload_json) "
+                "VALUES (?, ?, ?, ?)",
+                (component, level, message, json.dumps(payload) if payload else None),
+            )
+        except Exception:  # noqa: BLE001
+            self._log.warning("failed to write event: {}", message)
 
     async def _regime_loop(self) -> None:
         """Refresh the market regime on a timer."""
@@ -77,8 +106,21 @@ class Orchestrator:
                     "regime={} btc={:.2%} sol={:.2%} fg={}",
                     snap.regime, snap.btc_change_24h, snap.sol_change_24h, snap.fear_greed,
                 )
+                await self._log_event(
+                    "orchestrator",
+                    "INFO",
+                    f"regime={snap.regime} btc={snap.btc_change_24h:.2%} "
+                    f"sol={snap.sol_change_24h:.2%} fg={snap.fear_greed}",
+                    {
+                        "regime": snap.regime,
+                        "btc_change_24h": snap.btc_change_24h,
+                        "sol_change_24h": snap.sol_change_24h,
+                        "fear_greed": snap.fear_greed,
+                    },
+                )
             except Exception as err:  # noqa: BLE001
                 self._log.warning("regime refresh failed: {}", err)
+                await self._log_event("orchestrator", "ERROR", f"regime refresh failed: {err}")
             await self._wait(interval)
 
     async def _safety_loop(self) -> None:
@@ -87,8 +129,11 @@ class Orchestrator:
         while not self._stop.is_set():
             try:
                 await self._safety.tick()
+                await self._log_event("orchestrator", "INFO", "safety tick completed")
+                await self._prune_old_events()
             except Exception as err:  # noqa: BLE001
                 self._log.warning("safety tick failed: {}", err)
+                await self._log_event("orchestrator", "ERROR", f"safety tick failed: {err}")
             await self._wait(interval)
 
     async def _llm_loop(self) -> None:
@@ -114,8 +159,19 @@ class Orchestrator:
                 opened = await runner.service.scan_and_enter()
                 if opened:
                     self._log.info("{} opened {}", runner.service.name, opened)
+                    await self._log_event(
+                        runner.service.name,
+                        "INFO",
+                        f"opened position: {opened}",
+                        {"action": "open", "detail": str(opened)},
+                    )
             except Exception as err:  # noqa: BLE001
                 self._log.warning("{} scan failed: {}", runner.service.name, err)
+                await self._log_event(
+                    runner.service.name,
+                    "ERROR",
+                    f"scan failed: {err}",
+                )
             await self._wait(runner.scan_interval)
 
     async def _bucket_manage_loop(self, runner: BucketRunner) -> None:
@@ -129,9 +185,29 @@ class Orchestrator:
                 closed = await runner.service.manage_positions()
                 if closed:
                     self._log.info("{} closed {}", runner.service.name, closed)
+                    await self._log_event(
+                        runner.service.name,
+                        "INFO",
+                        f"closed position: {closed}",
+                        {"action": "close", "detail": str(closed)},
+                    )
             except Exception as err:  # noqa: BLE001
                 self._log.warning("{} manage failed: {}", runner.service.name, err)
+                await self._log_event(
+                    runner.service.name,
+                    "ERROR",
+                    f"manage failed: {err}",
+                )
             await self._wait(runner.manage_interval)
+
+    async def _prune_old_events(self) -> None:
+        """Delete events older than 7 days to prevent DB bloat."""
+        try:
+            await self._db.execute(
+                "DELETE FROM events WHERE created_at < DATETIME('now', '-7 days')"
+            )
+        except Exception:  # noqa: BLE001
+            self._log.warning("event pruning failed")
 
     async def _wait(self, seconds: float) -> None:
         """Sleep or exit early when :meth:`request_stop` is called.
@@ -147,7 +223,6 @@ class Orchestrator:
     async def run(self) -> None:
         """Launch every loop concurrently and wait for a stop signal."""
         self._log.info("orchestrator starting with {} buckets", len(self._buckets))
-        # Kick the regime once so buckets get multipliers on the first tick.
         try:
             await self._regime.refresh()
         except Exception as err:  # noqa: BLE001

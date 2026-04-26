@@ -35,6 +35,7 @@ class Secrets:
     helius_api_key: str | None = None
     birdeye_api_key: str | None = None
     solana_rpc_url: str | None = None
+    wallet_public_key: str | None = None
 
 
 @dataclass
@@ -122,5 +123,6 @@ class ConfigLoader:
             helius_api_key=os.getenv("HELIUS_API_KEY") or None,
             birdeye_api_key=os.getenv("BIRDEYE_API_KEY") or None,
             solana_rpc_url=os.getenv("SOLANA_RPC_URL") or None,
+            wallet_public_key=os.getenv("WALLET_PUBLIC_KEY") or None,
         )
         return AppConfig(raw=raw, secrets=secrets, mode=mode)
