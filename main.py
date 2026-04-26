@@ -195,7 +195,7 @@ async def _bootstrap(args: argparse.Namespace) -> tuple[AppConfig, dict[str, Any
             float(cfg.bucket("ARBITRAGE").get("price_check_interval_seconds", 10)),
         ),
     ]
-    orch = Orchestrator(runners, regime, safety, scanner, log_factory, cfg.raw)
+    orch = Orchestrator(runners, regime, safety, scanner, log_factory, cfg.raw, db)
     return cfg, {"db": db, "http": http, "orchestrator": orch, "logger": log_factory}
 
 

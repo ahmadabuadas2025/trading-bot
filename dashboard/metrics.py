@@ -2,18 +2,76 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+from urllib.request import Request, urlopen
 
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from dotenv import load_dotenv
 
 from dashboard.db import df, scalar
 
 
+def _fetch_live_sol_balance() -> float | None:
+    """Fetch real SOL balance from wallet via Solana RPC."""
+    load_dotenv(override=False)
+    pub_key = os.getenv("WALLET_PUBLIC_KEY")
+    rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+    if not pub_key:
+        return None
+    body = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getBalance",
+        "params": [pub_key],
+    }).encode()
+    req = Request(rpc_url, data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        lamports = data.get("result", {}).get("value", 0)
+        return lamports / 1e9
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fetch_sol_price_usd() -> float:
+    """Fetch current SOL/USD price from CoinGecko."""
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"
+        req = Request(url, headers={"Accept": "application/json"})
+        with urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        return float(data["solana"]["usd"])
+    except Exception:  # noqa: BLE001
+        return 150.0
+
+
 def render_kpis(conn: sqlite3.Connection) -> None:
     """Render top KPI metric cards."""
-    total_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
+    current_mode = scalar(
+        conn, "SELECT trading_mode FROM safety_state WHERE id = 1", default="paper",
+    )
+
+    sol_balance: float | None = None
+    if current_mode == "live":
+        sol_balance = _fetch_live_sol_balance()
+        if sol_balance is not None:
+            sol_price = _fetch_sol_price_usd()
+            total_balance = sol_balance * sol_price
+            balance_label = f"Wallet ({sol_balance:.4f} SOL)"
+        else:
+            total_balance = scalar(
+                conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0,
+            )
+            balance_label = "Portfolio (no wallet key)"
+    else:
+        total_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
+        balance_label = "Portfolio (Paper)"
+
     daily_pnl = scalar(
         conn,
         "SELECT COALESCE(SUM(pnl_usd), 0) FROM positions "
@@ -41,7 +99,7 @@ def render_kpis(conn: sqlite3.Connection) -> None:
 
     cols = st.columns(7)
     metrics = [
-        ("Portfolio", f"${total_balance:,.2f}", None),
+        (balance_label, f"${total_balance:,.2f}", None),
         ("Daily P&L", f"${daily_pnl:+,.2f}", daily_pnl),
         ("Win rate", f"{win_rate:.1f}%", None),
         ("Open positions", str(open_count), None),
@@ -59,7 +117,7 @@ def render_kpis(conn: sqlite3.Connection) -> None:
 
 def render_equity_curve(conn: sqlite3.Connection) -> None:
     """7-day equity curve built from closed positions."""
-    st.subheader("Equity curve — last 7 days")
+    st.subheader("Equity curve - last 7 days")
     data = df(
         conn,
         """
@@ -74,7 +132,19 @@ def render_equity_curve(conn: sqlite3.Connection) -> None:
         st.info("No closed trades in the last 7 days.")
         return
 
-    start_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
+    current_mode = scalar(
+        conn, "SELECT trading_mode FROM safety_state WHERE id = 1", default="paper",
+    )
+    if current_mode == "live":
+        sol_balance = _fetch_live_sol_balance()
+        if sol_balance is not None:
+            sol_price = _fetch_sol_price_usd()
+            start_balance = sol_balance * sol_price
+        else:
+            start_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
+    else:
+        start_balance = scalar(conn, "SELECT SUM(balance) FROM fund_buckets", default=0.0)
+
     window_pnl_total = data["daily_pnl"].sum()
     start_balance_window = start_balance - window_pnl_total
 

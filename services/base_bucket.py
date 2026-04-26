@@ -2,12 +2,14 @@
 
 Provides common helpers: balance lookup, dedup+blacklist+safety gate,
 position-size calculation with regime multiplier, exit management
-with stop/take-profit/trailing, and P&L post-processing (blacklist
-on heavy losses, per-bucket cooldown on 3 consecutive losses).
+with stop/take-profit/trailing, P&L post-processing (blacklist
+on heavy losses, per-bucket cooldown on 3 consecutive losses),
+and structured event emission.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,6 +63,33 @@ class BaseBucket:
         self._deps = deps
         self._cfg = bucket_cfg
         self._log = deps.logger.get(self.name)
+
+    async def _emit_event(
+        self,
+        level: str,
+        message: str,
+        payload: dict | None = None,
+    ) -> None:
+        """Write a structured event to the ``events`` table.
+
+        Args:
+            level: Severity (``INFO``, ``WARNING``, ``ERROR``).
+            message: Human-readable description.
+            payload: Optional JSON-serialisable metadata.
+        """
+        try:
+            await self._deps.db.execute(
+                "INSERT INTO events (component, level, message, payload_json) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    self.name,
+                    level,
+                    message,
+                    json.dumps(payload) if payload else None,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            self._log.warning("failed to emit event: {}", message)
 
     async def enabled(self) -> bool:
         """Whether the bucket is enabled in the DB.
