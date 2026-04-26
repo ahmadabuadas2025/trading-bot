@@ -1,91 +1,184 @@
+# SolanaMemBot parameter file.
+# Secrets live in .env. Everything else lives here.
+
 app:
-  name: SolanaJupiterBot
+  name: SolanaMemBot
   timezone: UTC
   log_level: INFO
   db_path: data/bot.db
   log_path: logs/bot.log
-  mode: paper  # paper or live
 
-risk:
-  max_risk_per_trade_pct: 0.02
-  max_daily_drawdown_pct: 0.05
-  max_open_trades_per_strategy: 5  # allow more concurrent trades
-  auto_shutdown_on_breach: true
+mode:
+  # "paper" or "live". CLI --mode overrides this value.
+  default: paper
 
 paper_trading:
   starting_balance_usd: 1000.0
+  slippage_enabled: true
+  base_slippage_pct: 0.005
+  low_liq_threshold: 50000
+  low_liq_extra_slippage: 0.03
+  very_low_liq_threshold: 20000
+  very_low_liq_extra_slippage: 0.05
+  price_impact_factor: 0.10
+  solana_base_fee_sol: 0.000005
+  solana_priority_fee_sol: 0.0001
+  jupiter_fee_pct: 0.002
+  # SOL price is auto-fetched from CoinGecko at runtime; this is a
+  # fallback used only if the fetch fails.
   fallback_sol_usd: 150.0
 
-jupiter:
-  base_url: "https://quote-api.jup.ag/v6"
-  price_api_url: "https://api.jup.ag/price/v2"
-  default_slippage_bps: 100
-  max_slippage_bps: 150
-  request_timeout_seconds: 15
-  max_retries: 3
+buckets:
+  HOT_TRADER:
+    enabled: true
+    allocation_pct: 0.10
+    description: Fast scalping on trending coins.
+    position_size_pct: 0.03
+    stop_loss_pct: -0.04
+    take_profit_pct: 0.08
+    max_hold_minutes: 30
+    max_open_positions: 5
+    scan_interval_seconds: 300
+    price_check_interval_seconds: 15
+    use_llm: false
+    entry:
+      min_volume_1h_usd: 100000
+      min_liq_usd: 50000
+      min_price_change_5m_pct: 0.02
+      min_price_change_1h_pct: 0.08
+  COPY_TRADER:
+    enabled: true
+    allocation_pct: 0.30
+    description: Mirror top active wallets.
+    stop_loss_pct: -0.12
+    take_profit_pct: 0.35
+    max_hold_minutes: 360
+    max_open_positions: 6
+    scan_interval_seconds: 60
+    trailing_arm_pct: 0.20
+    trailing_gap_pct: 0.12
+    use_llm: false
+    wallet_mirror_delay_seconds: 15
+    rug_blacklist_after: 2
+    min_wallet_trades_7d: 20
+    min_wallet_win_rate_pct: 0.55
+  GEM_HUNTER:
+    enabled: true
+    allocation_pct: 0.40
+    description: Hidden low-cap gems, LLM validated twice a day.
+    position_size_pct: 0.03
+    max_hold_minutes: 480
+    max_open_positions: 5
+    scan_interval_seconds: 900
+    trailing_arm_pct: 0.30
+    trailing_gap_pct: 0.15
+    atr_stop_mult: 2.0
+    atr_tp_mult: 5.0
+    use_llm: true
+    entry:
+      min_liq_usd: 10000
+      max_liq_usd: 500000
+      min_vol_liq_ratio: 3.0
+      max_age_hours: 24
+  NEW_LISTING:
+    enabled: true
+    allocation_pct: 0.20
+    description: Brand new listings, LLM validated.
+    position_size_pct: 0.02
+    stop_loss_pct: -0.20
+    take_profit_pct: 0.60
+    max_hold_minutes: 120
+    max_open_positions: 3
+    scan_interval_seconds: 180
+    use_llm: true
+    entry:
+      min_liq_usd: 5000
+      max_age_minutes: 30
 
-copy_trading:
-  enabled: true
-  min_liquidity_usd: 50000
-  max_market_cap_usd: 50000000
-  min_wallet_win_rate: 0.55
-  position_size_pct_of_signal: 0.15
-  stop_loss_pct: -0.12
-  take_profit_pct: 0.35
-  # Add wallet addresses of profitable traders you want to copy.
-  # Copy trading will not produce trades until this list is populated.
-  # Example:
-  #   - "YourTargetWalletAddress1..."
-  #   - "YourTargetWalletAddress2..."
-  tracked_wallets:
-    # IMPORTANT: Add wallet addresses of profitable Solana traders here.
-    # Copy trading will NOT work until this list is populated.
-    # Find active profitable wallets on birdeye.so or solscan.io
-    # Example format:
-    # - "WalletPublicKeyHere..."
-    []
+scoring:
+  # Profile A: LLM data available.
+  profile_a_weights:
+    social: 0.25
+    wallet: 0.25
+    momentum: 0.15
+    safety: 0.20
+    acceleration: 0.15
+  profile_a_entry_threshold: 200
+  # Profile B: math only, no LLM data.
+  profile_b_weights:
+    social: 0.0
+    wallet: 0.0
+    momentum: 0.35
+    safety: 0.35
+    acceleration: 0.30
+  profile_b_entry_threshold: 65
+  # Automatic weekly weight tuning.
+  auto_tune_enabled: true
+  auto_tune_low_win_rate: 0.40
+  auto_tune_high_win_rate: 0.70
+  auto_tune_step: 0.05
 
-hot_trading:
-  enabled: true
-  volume_spike_multiplier: 2.0    # lowered for more signals
-  volume_spike_window_seconds: 180  # shorter window for faster detection
-  take_profit_pct: 0.02
-  stop_loss_pct: -0.0075
-  max_hold_seconds: 120
-
-gem_detector:
-  enabled: true
-  min_liquidity_usd: 10000    # lowered — 30000 too strict for new tokens
-  min_holders: 30              # lowered — 100 too strict for new tokens
-  allocation_pct: 0.02
-  take_profit_multiplier: 3.0
-  stop_loss_pct: -0.30
-
-arbitrage:
-  enabled: true
-  min_profit_threshold_pct: 0.003
-  max_capital_pct: 0.07
-  max_concurrent_trades: 2
-  max_consecutive_failures: 5
-  scan_interval_seconds: 2
+regime:
+  refresh_minutes: 30
+  bullish_btc_threshold: -0.02
+  bullish_sol_threshold: -0.03
+  bullish_fg_threshold: 50
+  bearish_btc_threshold: -0.05
+  bearish_fg_threshold: 35
+  multipliers:
+    BULLISH:
+      HOT_TRADER: 1.0
+      COPY_TRADER: 1.0
+      GEM_HUNTER: 1.0
+      NEW_LISTING: 1.0
+    NEUTRAL:
+      HOT_TRADER: 0.5
+      COPY_TRADER: 0.5
+      GEM_HUNTER: 0.5
+      NEW_LISTING: 0.5
+    BEARISH:
+      HOT_TRADER: 0.0
+      COPY_TRADER: 0.25
+      GEM_HUNTER: 0.25
+      NEW_LISTING: 0.0
 
 safety:
-  max_risk_score: 50
-  reject_mint_authority: true
-  reject_freeze_authority: true
-  max_top_holder_pct: 0.25
-  min_token_age_seconds: 30
-  restricted_age_seconds: 300
-  honeypot_check_enabled: true
+  check_interval_seconds: 300
+  daily_loss_emergency_pct: 0.15
+  consecutive_losses_cooldown: 3
+  consecutive_losses_cooldown_hours: 2
+  rug_cooldown_hours: 24
+  rug_loss_pct: -0.40
+  rug_minutes: 30
 
-solana:
-  #"https://mainnet.helius-rpc.com/?api-key=a1425afc-46ad-4fa1-a154-b40e3a413844"  # CHANGE THIS to your Helius/Tatum RPC for reliable live mode
-  #rpc_url: "https://mainnet.helius-rpc.com/?api-key=a1425afc-46ad-4fa1-a154-b40e3a413844"
-  rpc_url: "https://mainnet.helius-rpc.com/?api-key=610f5fb0-ddaa-49ae-8425-0840f4e62594"
-dashboard:
-  refresh_interval_seconds: 5
+llm:
+  enabled: true
+  model: "qwen/qwen3-coder-480b-a35b-instruct:free"
+  fallback_model: "nvidia/nemotron-3-super-120b-a12b:free"
+  base_url: "https://openrouter.ai/api/v1"
+  scan_hours_utc: [8, 20]
+  max_candidates_per_bucket: 10
+  request_timeout_seconds: 60
+  result_ttl_hours: 12
+
+social_collector:
+  cache_ttl_hours: 6
+  reddit_subreddits: ["CryptoMoonShots", "solana"]
+  reddit_request_gap_seconds: 2.0
+  coingecko_enabled: true
+  lunarcrush_enabled: true
 
 http:
   max_retries: 3
   backoff_base_seconds: 1.0
+  backoff_max_seconds: 10.0
+  circuit_breaker_failures: 5
+  circuit_breaker_cooldown_seconds: 60
   default_timeout_seconds: 20
+
+atr:
+  cache_ttl_seconds: 300
+  period: 14
+  bucket_minutes: 5
+  min_buckets_for_tick_fallback: 10
+  last_resort_volatility_pct: 0.02

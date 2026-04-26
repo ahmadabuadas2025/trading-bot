@@ -1,41 +1,19 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
 *.egg-info/
-dist/
-build/
-*.egg
-
-# Virtual environments
 .venv/
 venv/
-ENV/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Project data
+data/*.db
+data/*.db-*
+logs/*.log
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Environment
-.env
-
-# Data
-data/*.db
-data/*.db-journal
-data/*.db-wal
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-old-bot.tar

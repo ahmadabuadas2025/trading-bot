@@ -1,3 +1,4 @@
+# SolanaMemBot runtime dependencies
 aiohttp>=3.9
 aiosqlite>=0.20
 loguru>=0.7
@@ -8,6 +9,3 @@ streamlit>=1.36
 pandas>=2.2
 plotly>=5.22
 tenacity>=8.3
-solders>=0.21
-solana>=0.34
-streamlit-autorefresh>=1.0

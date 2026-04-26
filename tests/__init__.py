@@ -1,1 +1,1 @@
-"""Test suite for SolanaJupiterBot."""
+"""Unit tests."""

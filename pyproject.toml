@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "solana-jupiter-bot"
-version = "2.0.0"
-description = "Automated Solana trading bot using Jupiter DEX aggregator"
+name = "solana-mem-bot"
+version = "0.1.0"
+description = "Personal automated Solana meme-coin trading bot."
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = { text = "MIT" }
+authors = [{ name = "SolanaMemBot" }]
 dependencies = [
     "aiohttp>=3.9",
     "aiosqlite>=0.20",
@@ -20,9 +21,6 @@ dependencies = [
     "pandas>=2.2",
     "plotly>=5.22",
     "tenacity>=8.3",
-    "solders>=0.21",
-    "solana>=0.34",
-    "streamlit-autorefresh>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -33,21 +31,23 @@ dev = [
     "mypy>=1.10",
 ]
 
+[tool.setuptools]
+packages = ["core", "clients", "services", "utils"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
 [tool.ruff]
-target-version = "py312"
 line-length = 100
+target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = ["E", "F", "W", "I", "B", "UP", "N"]
 ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = false
-warn_return_any = true
-warn_unused_configs = true
 ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
